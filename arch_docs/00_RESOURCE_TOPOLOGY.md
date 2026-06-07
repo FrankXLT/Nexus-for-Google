@@ -19,51 +19,6 @@ All components share a single VM and run under a single `systemd` process (`nexu
 
 ## 0.4 Mermaid Topology Map
 ```mermaid
----
-config:
-  layout: elk
----
-flowchart TB
-  subgraph External["External"]
-        GW["GW"]
-        Browser["Browser"]
-        GCP_APIs["GCP_APIs"]
-  end
-
-  subgraph Daemon["Daemon"]
-    direction TB
-        Ingress["Ingress"]
-        Worker["Worker"]
-  end
-
-  subgraph Databases["Databases"]
-    direction LR
-        CoreDB["CoreDB"]
-        KBDB["KBDB"]
-  end
-
-  subgraph VM["VM"]
-    direction TB
-        UFW["UFW"]
-        Caddy["Caddy Reverse Proxy<br/>Let's Encrypt SSL<br/>Static SPA & API Router"]
-        Daemon
-        Databases
-  end
-    
-    Ingress -.-> Worker
-    UFW --> Caddy
-    Caddy --> Ingress
-    Caddy --> Browser
-    Ingress --> CoreDB
-    Ingress --> KBDB
-    Worker <--> Databases
-    GW --> UFW
-    Browser --> UFW
-    Worker --> GCP_APIs
-    Databases:::storage---
-config:
-  layout: elk
----
 flowchart TB
   subgraph External["External"]
         GW["GW"]

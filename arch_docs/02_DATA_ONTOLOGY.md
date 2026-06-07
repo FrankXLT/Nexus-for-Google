@@ -27,10 +27,6 @@ Prompts and routing logic are **NOT hardcoded in Python**. The database acts as 
 ## 2.4 Schema Map (Entity Relationship)
 
 ```mermaid
----
-config:
-  layout: elk
----
 erDiagram
     direction TB
     
