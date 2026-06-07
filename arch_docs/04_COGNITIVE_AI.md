@@ -24,3 +24,35 @@ Instead of generic summaries, extraction is strictly tied to the artifact's `Pur
 1. The worker fetches the exact prompt tied to the `Purpose` (e.g., `EXTRACT_FINANCE` for an `Invoice`).
 2. **UI Output:** Extracts a tight 1-to-3 sentence `ui_summary` optimized for mobile screens (saved to `nexus_core.db`).
 3. **KB Output:** Extracts structured JSON key-value pairs representing deep facts (saved to `nexus_kb.db` via FTS5).
+
+## 4.5 Prompt Invocation Sequence (The RAG Pipeline)
+
+When an artifact reaches `ASSIMILATING`, the LLM must extract data. The coding agent MUST follow this logic tree to prevent hallucinating extractions for Purposes that do not require them.
+
+```mermaid
+sequenceDiagram
+    participant Assim as ASSIM Worker
+    participant DB as nexus_core.db
+    participant PromptDB as CONFIG_PROMPTS
+    participant LLM as Gemini Models
+    participant KB as nexus_kb.db
+    participant Drive as Google Drive API
+
+    Assim->>DB: Poll (ASSIMILATING)
+    Assim->>PromptDB: Query extraction_prompt_id based on Purpose
+    
+    alt No Custom Prompt Assigned
+        PromptDB-->>Assim: NULL
+        Assim->>LLM: Fallback: Generate 1-3 sentence UI Summary only
+        LLM-->>Assim: String summary
+    else Custom Prompt Exists
+        PromptDB-->>Assim: Return Prompt Text & model_tier
+        Assim->>LLM: Send Payload + Custom Prompt to specific model_tier
+        LLM-->>Assim: Return UI Summary + Deep JSON Facts
+        Assim->>KB: INSERT JSON Facts into FTS5 Virtual Table
+    end
+    
+    Assim->>DB: UPDATE ui_summary
+    Assim->>Drive: PATCH File Properties (Inject Metadata / JSON)
+    Assim->>DB: UPDATE (State: COMPLETED)
+```

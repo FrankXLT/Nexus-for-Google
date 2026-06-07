@@ -17,6 +17,21 @@ All deployment, maintenance, and diagnostics are controlled via a single Bash sc
    - `--shell`: Opens an IAP-secured SSH tunnel to the active GCP VM.
    - `--clean`: Purges old release folders (keeping the 3 most recent) and executes `VACUUM` on both SQLite databases to optimize disk usage.
 
+## 1.2 Unified DevOps, VM Security & Auth (`nexus.sh`)
+All deployment and maintenance are controlled via `nexus.sh`. The coding agent MUST reference the Dead Repo (`Nexus-for-Google-DeadRepo/scripts/`) for legacy Bash/PowerShell syntax, but refactor it into this unified, idempotent script.
+
+**The `--provision` Sequence (VM Standup):**
+When a fresh GCP `e2-micro` VM is spun up, the script MUST execute this strict security baseline:
+1. **The Swap Law:** Allocate a 2GB `/swapfile` (`swappiness=10`) to prevent OOM panics during LLM and database processing on the 1GB RAM VM.
+2. **OS Firewall (`ufw`):** Enable Uncomplicated Firewall. Strictly allow *only* Port `443` (HTTPS) and Port `22` (SSH). Block all others.
+3. **GCP Network Firewall:** Use the `gcloud` CLI to attach a network tag explicitly allowing TCP `443` and dropping all other external ingress.
+4. **IAP Identity Proxy:** Configure GCP Identity-Aware Proxy (IAP) to allow zero-trust SSH access from the developer without exposing Port `22` to the open internet.
+5. **Reverse Proxy:** Install Caddy (or Nginx) to securely terminate SSL (Let's Encrypt) and reverse-proxy external Port `443` traffic to the internal FastAPI `127.0.0.1:8000` port.
+6. **Daemonization:** Create `nexus.service` in `systemd` to ensure the asynchronous worker loops automatically restart on VM reboot or crash.
+
+**The Auth Tunnel (`--auth-tunnel`):**
+- Harvest the auth-tunneling concept from the Dead Repo (`auth_tunnel.sh`/`ps1`). Because Nexus runs on a headless VM, standard OAuth 2.0 flows fail when attempting to launch a local browser. The script must establish a secure SSH port-forwarding tunnel via GCP IAP so the developer can click a `localhost` link on their physical machine, authenticate, and securely route the callback to the headless VM.
+
 ## 1.3 Telemetry & Diagnostics
 Because the system runs highly parallel background processes, debugging must be deterministic.
 - **State Tracing:** Any "stuck" artifact is instantly debugged by querying `SELECT id, state FROM WORKSPACE_ARTIFACTS`.
