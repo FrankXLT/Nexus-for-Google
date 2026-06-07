@@ -36,7 +36,7 @@ erDiagram
         TEXT prompt_text ""
     }
     CONFIG_SYSTEM {
-        TEXT key PK ""
+        TEXT key PK "e.g., drive_log_retention_days, db_audit_retention_days"
         TEXT value_json ""
     }
     CATEGORIES {
@@ -101,7 +101,7 @@ erDiagram
         BOOLEAN nexus_important ""
         BOOLEAN nexus_starred ""
         TEXT ui_summary ""
-        TEXT state "SUB, RAW, OCR_PENDING, TRIAGE to COMPLETED"
+        TEXT state "SUB, RAW, OCR_PENDING, TRIAGE to COMPLETED, ERROR"
         INTEGER locked_at_ts "Epoch timestamp tracking active processing time"
     }
     ARTIFACT_KNOWLEDGE {
@@ -114,7 +114,18 @@ erDiagram
         TEXT resource_id "Google's internal tracking ID"
         INTEGER expiration_ts "Epoch timestamp of channel expiration"
     }
+    AI_AUDIT_LOGS {
+        TEXT id PK ""
+        TEXT artifact_id FK "Links to WORKSPACE_ARTIFACTS"
+        TEXT prompt_name "Which prompt was used"
+        BLOB request_payload_compressed "Python zlib compressed JSON sent to LLM"
+        BLOB response_payload_compressed "Python zlib compressed JSON returned by LLM"
+        INTEGER execution_ms "Latency tracking"
+        INTEGER total_tokens "Cost tracking"
+        INTEGER created_at_ts "Epoch timestamp for Watchdog pruning"
+    }
 
+    WORKSPACE_ARTIFACTS ||--o{ AI_AUDIT_LOGS : "audited_by"
     WORKSPACE_ARTIFACTS ||--o{ WEBHOOK_REGISTRY : "ingested_via"
     CONFIG_PROMPTS ||--o{ PURPOSES : "instructs"
     CATEGORIES ||--o{ ENTITIES : "owns"

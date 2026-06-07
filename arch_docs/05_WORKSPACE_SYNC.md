@@ -40,3 +40,11 @@ The coding agent MUST utilize Google's Batch execution endpoints (referencing th
 - **For Gmail:** Use the `users.messages.batchModify` endpoint to apply/remove labels for up to 1,000 messages in a single HTTP request.
 - **For Drive:** Utilize the Google API Client's `BatchHttpRequest` object to group folder moves and property updates.
 - **Trigger:** If the worker detects multiple artifacts in the `ACTIONABLE` state destined for the same mutations, it must bundle them into a single batch network call. All external API calls MUST be wrapped in robust Exponential Backoff (Jitter) handlers to survive temporary rate limits gracefully.
+
+## 5.5 Initialization Folders & The Exclusion Law
+Upon the first successful Workspace sync, Nexus MUST natively provision a root directory named `Nexus_System` in the user's Google Drive for Tier 3 error logging.
+- **Default Structure:**
+  - `Nexus_System/Logs/` (Batched system log zips)
+  - `Nexus_System/Diagnostics/` (JSON dumps of fatal AI/API crashes)
+  - `Nexus_System/Dead_Letter/` (Physical files that repeatedly crash the pipeline)
+- **The Exclusion Law:** The Drive ID of the `Nexus_System` folder MUST be appended to an internal configuration exclusion blocklist. The `RAW` and `OCR_PENDING` async workers are **STRICTLY FORBIDDEN** from ingesting, reading, OCR'ing, or categorizing any files placed inside this directory to prevent infinite recursion loops where the AI attempts to analyze its own crash logs.

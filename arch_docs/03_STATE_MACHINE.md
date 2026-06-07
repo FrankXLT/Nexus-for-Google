@@ -42,6 +42,11 @@ Nexus V3 contains NO linear Python pipelines. Every step of processing is handle
     2. Extracts dense JSON key-value facts (e.g., `{"Total": 45.00}`). Writes to `nexus_kb.db`.
 *   **Outcome:** Transition to `COMPLETED`.
 
+### `ERROR` (The Dead Letter State)
+*   **Trigger:** Any worker encounters an unhandled exception, permanent API crash (HTTP 429/500 limits exceeded), or unreadable file corruption.
+*   **Action:** The worker catches the exception, updates the state to `ERROR` to drop the database lock, and writes the stack trace and payload to local disk for the Watchdog to batch-upload to Google Drive (`Nexus_System/Diagnostics/`).
+*   **Outcome:** Artifact is parked. Requires manual user intervention in the UI to click "Retry" (which resets the state to `RAW`) or "Discard".
+
 ## 3.2 The Fusion Permutation Sequences
 
 The following Mermaid sequence dictates EXACTLY how artifacts flow through the State Machine based on what is known (SQL) vs. what is unknown (LLMs). Agents MUST NOT invent paths outside of these defined permutations.
@@ -129,11 +134,12 @@ When the Sweeper Engine imports thousands of legacy emails, parallel AI workers 
 *   **Atomic Claiming:** When an async worker claims an artifact (e.g., moving it from `TRIAGE` to `EVALUATING`), it MUST use a `BEGIN IMMEDIATE` transaction or atomic `UPDATE ... RETURNING` syntax. Standard `UPDATE` statements are forbidden to prevent race conditions.
 *   **Sweeper Backpressure:** The Sweeper Engine MUST check the active backlog (`SELECT COUNT(*) FROM WORKSPACE_ARTIFACTS WHERE state IN ('RAW', 'TRIAGE', 'EVALUATING')`). If the count exceeds **250 items**, the Sweeper MUST yield the event loop (`await asyncio.sleep(60)`) to let the AI process the queue, protecting both the LLM API quota and the SQLite lock limits.
 
-## 3.4 The Watchdog Engine (Webhook Renewals)
-Google Workspace push notification channels expire automatically (maximum 7 days for Gmail). To prevent the ingress pipeline from silently dying, Nexus utilizes a background task.
-*   **The Loop:** A `WATCHDOG_ENGINE` loop runs every 12 hours.
-*   **Action:** Queries `WEBHOOK_REGISTRY` for any `channel_id` expiring within the next 48 hours.
-*   **Renewal:** It negotiates a new watch channel with the Google API, saves the new `channel_id` and `expiration_ts` to the database, and calls the API to explicitly `stop` the old, expiring channel.
+## 3.4 The Watchdog Engine (Renewals, Zombies, & Pruning)
+A background task `WATCHDOG_ENGINE` loop runs at defined intervals to ensure systemic health and prevent data bloat.
+1. **Webhook Renewals (Every 12h):** Queries `WEBHOOK_REGISTRY` for any `channel_id` expiring within 48 hours. Negotiates a new watch channel and stops the old one.
+2. **Zombie Reclamation (Every 5m):** Queries `WORKSPACE_ARTIFACTS` for items in an active processing state where `locked_at_ts` is older than 15 minutes. Resets them to `TRIAGE` or `RAW` to release the lock.
+3. **Database Telemetry Pruning (Daily):** Reads the `db_audit_retention_days` setting from `CONFIG_SYSTEM` (Default: 90). The Watchdog automatically `DELETE`s rows from `AI_AUDIT_LOGS` where the parent artifact is in the `COMPLETED` or `IGNORED` state and the log is older than the threshold. **The Quarantine Law:** The Watchdog is STRICTLY FORBIDDEN from deleting logs tied to an artifact currently in the `QUARANTINE` or `ERROR` state, regardless of age. If the setting is `0`, deletion is bypassed entirely (Never Delete).
+4. **Drive Quota Management (Daily):** Reads the `drive_log_retention_days` setting (Default: 30). The Watchdog queries the Google Drive API for files in `Nexus_System/Logs/` older than the threshold and permanently deletes them to protect the user's 15GB free tier. If the setting is `0`, deletion is bypassed entirely.
 
 ## 3.5 The Infinite Loop Law (Lifespan vs BackgroundTasks)
 Workers MUST NOT be implemented as FastAPI `BackgroundTasks` triggered by web routes, as they will die when web traffic stops.

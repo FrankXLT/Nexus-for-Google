@@ -22,8 +22,9 @@ To ensure smooth deployments and prevent database locking, the VM filesystem MUS
 **Interactive Secret Injection (`--deploy`):**
 If `/shared/.env` does not exist during deployment, the `nexus.sh` script MUST pause and interactively prompt the user for their `NEXUS_HMAC_SECRET` and `NEXUS_API_KEY` (Gemini), saving them to the `.env` file. It must also verify the presence of `credentials.json`. Secrets are NEVER hardcoded.
 
-## 1.4 Telemetry & Diagnostics
-Because the system runs highly parallel background processes, debugging must be deterministic.
-- **State Tracing:** Any "stuck" artifact is instantly debugged by querying `SELECT id, state FROM WORKSPACE_ARTIFACTS`.
-- **System Logs:** All workers write cleanly to standard out, managed by systemd (`journalctl -u nexus.service -f`).
-- **Hallucination Dumps:** Every raw Gemini API request payload and exact response is logged to a secure Google Drive `Diagnostics` folder. If the LLM generates a bad categorization, the exact dynamic prompt that caused it is permanently captured for review.
+## 1.4 Tiered Telemetry & Diagnostics
+Because the system runs highly parallel non-deterministic AI processes, debugging must be tiered and accessible.
+
+1. **Tier 1: UI Decision Tracing (Hot Telemetry):** Every LLM invocation MUST be logged to the `AI_AUDIT_LOGS` table in `nexus_core.db`. This allows the UI to render the exact prompt, payload, and response that led to a specific taxonomy decision, eliminating the "black box" effect. To prevent database bloat, the JSON payloads MUST be compressed using `zlib` and stored as SQLite `BLOB`s.
+2. **Tier 2: Live System Logs (systemd & Local Disk):** Standard Python `logging` (INFO/WARN/ERROR) is pushed to `stdout` (viewable via `journalctl -u nexus.service -f`) and written to a local file (`/opt/nexus/shared/logs/nexus.log`). 
+3. **Tier 3: Cold Storage (Google Drive Batch Sync):** To prevent disk bloat and API rate limits, the `WATCHDOG_ENGINE` loop compresses the local log file daily, uploads it to Google Drive (`Nexus_System/Logs/`), and clears the local file. Synchronous API logging to Drive is strictly forbidden. If a worker encounters an unrecoverable failure, it dumps the raw payload and stack trace as a standalone `.json` file into `Nexus_System/Diagnostics/`.

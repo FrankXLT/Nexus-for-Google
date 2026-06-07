@@ -26,14 +26,20 @@ The frontend is a Material Design 3 Single Page Application (SPA). To prevent br
 ## 6.4 Search Results Engine (Tri-Mode)
 Results render below the VQB via lazy-loading grids.
 1. **Knowledge Graph (Nexus Scope):** Masonry grid of cards using the 1-3 sentence `ui_summary`.
-2. **Volumetric Treemap (Nexus Scope):** 3-Tier D3.js (or equivalent) visual drill-down. Dynamically roots based on query depth (Broad Query = `Category ➔ Alias ➔ Sub-Entity`; Narrow Query = `Entity/Sub-Entity ➔ Purpose ➔ Artifact`).
-3. **Staging Grid (Proxy Scope):** Inbox-style layout for raw Gmail/Drive queries. Checked items execute a batch dump to the `RAW` webhook ingress.
-4. **Context Modal:** Clicking an artifact opens a central modal to edit taxonomy or deep-link to the workspace file.
+2. **Volumetric Treemap (Nexus Scope):** 3-Tier D3.js (or equivalent) visual drill-down. Dynamically roots based on query depth.
+3. **Staging Grid (Proxy Scope):** Inbox-style layout for raw Gmail/Drive queries. Checked items execute a batch dump to the `SUB` webhook ingress.
+4. **Context Modal (The Inspector):** Clicking an artifact opens a central modal containing:
+   - **Context Tab:** Allows the user to edit the taxonomy linkage, toggle importance, or deep-link out to the native Workspace file.
+   - **AI Trace Tab:** Queries the `AI_AUDIT_LOGS` table (decompressing the `BLOB` payload via the API) to render a syntax-highlighted, read-only JSON tree. This allows the user to see the exact prompt, payload, and LLM output that generated the artifact's current state, ensuring total transparency into the AI reasoning.
 
-## 6.5 Taxonomy Management (Zero Trust Console)
-Administrative interface for managing `TAXONOMY_LINKAGES`.
+## 6.5 Taxonomy & System Management (Zero Trust Console)
+Administrative interface for managing `TAXONOMY_LINKAGES` and system configurations.
 - **Flow View:** Visual nodes/cards for merging aliases or re-parenting entities.
-- **Matrix View:** Infinite-scroll, virtualized data grid of linkages with Excel-style inline dropdowns to rapidly bulk-edit `gmail_sync_mode` or Purpose mapping.
+- **Matrix View:** Infinite-scroll, virtualized data grid of linkages with Excel-style inline dropdowns.
+- **System Settings Modal:** A dedicated configuration modal allowing the user to manage global settings in `CONFIG_SYSTEM`:
+  - **Drive Log Retention:** Input for `drive_log_retention_days` (Default: 30, `0` = Never Delete).
+  - **Database Audit Retention:** Input for `db_audit_retention_days` (Default: 90, `0` = Never Delete).
+  - **Ignored Labels/Folders:** UI token-input for managing `ignored_gmail_categories` and `domain_blocklist`.
 
 ## 6.6 The Aesthetic Law (Material Dashboard)
 The frontend MUST strictly adhere to a modern Material Dashboard design language (e.g., Creative Tim). The default theme is **Dark Mode**.

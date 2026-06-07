@@ -91,5 +91,7 @@
     { "key": "ignored_gmail_categories", "value_json": "[\"CATEGORY_PROMOTIONS\", \"CATEGORY_SOCIAL\", \"CATEGORY_FORUMS\"]" },
     { "key": "domain_blocklist", "value_json": "[\"calendar-notification@google.com\", \"no-reply@*\"]" },
     { "key": "ui_theme_support", "value_json": "{\"bg_base\":\"#121215\",\"bg_surface\":\"#1E1E24\",\"primary\":\"#6A5AA9\",\"success\":\"#34D399\",\"error\":\"#D27073\",\"warning\":\"#FBBF24\",\"info\":\"#556D8C\",\"muted\":\"#8B949E\",\"highlight\":\"#FFF176\",\"ai_sparkle\":\"#FABC12\"}" }
+    { "key": "drive_log_retention_days", "value_json": "30" },
+    { "key": "db_audit_retention_days", "value_json": "90" }
   ]
 }
