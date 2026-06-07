@@ -57,8 +57,87 @@ sequenceDiagram
     Assim->>DB: UPDATE (State: COMPLETED)
 ```
 
-## 4.6 Dedicated Cognitive Prompts
-The coding agent must utilize these specific prompts from `CONFIG_PROMPTS` to prevent LLM hallucination:
-- **`EVALUATE_NOVEL` (Heavy Fusion):** Triggers when `TRIAGE` fails. Uses `gemini-2.5-pro` to evaluate the artifact against the full Category/Purpose `description` columns in the database to deduce a novel taxonomy linkage safely.
-- **`BRAND_GROUNDING` (Entity Profiling):** Triggers when a new Entity is created. Uses `gemini-2.5-flash` with Google Grounding enabled. The prompt strictly asks for the official Canonical Legal Name and the 6-character brand hex color.
-- **`GENERATE_UI_THEME`:** Passes the 5-color user seed palette to `gemini-2.5-pro` to dynamically map HSL spectrum arrays matching the exact count of active Categories and Purposes in the database.
+## 4.6 The Permutation Sequence Diagrams (Routing Logic)
+
+To prevent brittle `if/else` spaghetti code, all artifacts MUST be routed through the following strict permutations.
+
+### 4.6.1 Gmail Permutations
+Gmail artifacts have reliable metadata (Sender Email) that allows for a fast SQL lookup before involving LLMs.
+
+```mermaid
+sequenceDiagram
+    participant DB as nexus_core.db
+    participant Worker as TRIAGE Worker
+    participant Flash as Flash-8B (Micro)
+    participant Pro as Pro (Heavy)
+    
+    Note over DB, Pro: Gmail Artifact Triage
+    DB->>Worker: Poll (State: RAW)
+    Worker->>Worker: Extract Sender Email (Metadata)
+    Worker->>DB: Query ALIASES for Sender Email
+    
+    alt Known Entity (Alias Found)
+        DB-->>Worker: Returns Entity ID
+        Worker->>DB: Query PURPOSES for Entity ID
+        alt Single Purpose
+            DB-->>Worker: 1 Purpose Found
+            Worker->>DB: UPDATE State: ACTIONABLE
+        else Multiple Purposes
+            DB-->>Worker: N Purposes Found
+            Worker->>Flash: Prompt: "Classify intent into [List of Purposes]"
+            Flash-->>Worker: Selected Purpose
+            Worker->>DB: UPDATE State: ACTIONABLE
+        end
+    else Unknown Entity (No Alias)
+        DB-->>Worker: No Alias Found
+        Worker->>DB: UPDATE State: EVALUATING
+        DB->>Pro: Poll (State: EVALUATING)
+        Pro->>Pro: Google Grounding (Brand/Hex Search)
+        Pro->>DB: INSERT Taxonomy_Linkages (State: QUARANTINE)
+    end
+```
+### 4.6.2 Google Drive Permutations
+Drive artifacts rely on raw OCR text and require a Two-Stage Prompt to avoid overwhelming the LLM.
+
+```mermaid
+sequenceDiagram
+    participant DB as nexus_core.db
+    participant OCR as Document AI
+    participant Worker as TRIAGE Worker
+    participant Flash as Flash-8B (Micro)
+    participant Pro as Pro (Heavy)
+    
+    Note over DB, Pro: Drive Artifact Triage
+    DB->>Worker: Poll (State: RAW)
+    Worker->>OCR: Extract text from PDF/Image
+    OCR-->>Worker: Raw OCR Text
+    
+    Worker->>Pro: Stage 1 Prompt: "Who is the vendor/sender in this text?"
+    Pro-->>Worker: Extracted Vendor Name
+    Worker->>DB: Query ALIASES for Vendor Name
+    
+    alt Known Vendor (Alias Found)
+        DB-->>Worker: Returns Entity ID
+        Worker->>DB: Query PURPOSES for Entity ID
+        Worker->>Flash: Stage 2 Prompt: "Classify document intent into [List of Purposes]"
+        Flash-->>Worker: Selected Purpose
+        Worker->>DB: UPDATE State: ACTIONABLE
+    else Unknown Vendor (No Alias)
+        DB-->>Worker: No Alias Found
+        Worker->>DB: UPDATE State: EVALUATING
+        DB->>Pro: Poll (State: EVALUATING)
+        Pro->>Pro: Google Grounding (Brand/Hex Search)
+        Pro->>DB: INSERT Taxonomy_Linkages (State: QUARANTINE)
+    end
+```
+
+### 4.7 Context Window Truncation Strategy
+To prevent token limit exhaustion and kernel panics (e.g., from a 50-page PDF or a 100-reply email thread), the system MUST enforce strict text truncation before passing payloads to the LLM.
+1. Gmail Threads (Reverse Chronological):
+   - Truncate the thread to keep only the most recent messages, up to a strict maximum of 8,000 tokens.
+   - Drop the oldest messages in the thread if they exceed the limit.
+2. **Drive Documents (Formatting & 5-Page Hard Limit):**
+   - Document AI's synchronous endpoint strictly rejects documents over 15 pages.
+   - **Native Google Docs:** Cannot be sliced natively. The worker MUST call the Drive API `export` method with `mimeType='application/pdf'` before proceeding.
+   - **Images (JPEG/PNG):** Bypass the slicer entirely. They are 1-page by definition and passed directly to Document AI via base64.
+   - **PDF Slicing:** All PDFs MUST be sliced locally on disk to the **first 5 pages** before base64 encoding to stay within the 1GB VM memory limit and prevent context hallucination.

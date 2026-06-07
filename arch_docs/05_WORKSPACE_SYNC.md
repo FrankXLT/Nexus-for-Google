@@ -26,8 +26,12 @@ The `ACTIONABLE` worker MUST respect the `gmail_sync_mode` string on the `ENTITY
 - `OMIT_PURPOSE`: Truncates the label. Applies `Category/Alias` only, grouping all artifacts for that sender natively.
 - `HIDDEN`: Processes the artifact entirely in the Nexus database and RAG Knowledge Base, but skips ALL native Gmail API label creation and application (ideal for personal/family communications).
 
-## 5.3 Data Sovereignty (Drive Metadata Injection)
-When processing Google Drive artifacts, the `ASSIMILATING` worker MUST inject the `canonical_name`, `workspace_alias`, `purpose`, and the extracted RAG JSON facts natively into the Google Drive file `properties` via the API. This ensures files remain queryable even if Nexus is uninstalled.
+## 5.3 Data Sovereignty (Hybrid Drive Metadata Injection)
+When processing Google Drive artifacts, the `ASSIMILATING` worker MUST inject data natively into the Google Drive file to ensure files remain queryable even if Nexus is uninstalled. 
+
+Because the Google Drive API custom `properties` field has a strict hard limit of **124 bytes per value**, attempting to inject a deep JSON fact payload will cause an `HTTP 400` crash. The worker MUST use a hybrid injection strategy:
+1. **Invisible Properties (Programmatic Indexing):** Inject the short strings `canonical_name` (Entity), `workspace_alias`, and `purpose` into the custom `properties` metadata object. This allows Nexus to execute lightning-fast programmatic queries (e.g., `q="properties has { key='Purpose' and value='Receipt' }"`).
+2. **The Description Field (Deep Semantic Survival):** Inject the 1-3 sentence `ui_summary` and the raw `extracted_facts_json` string into the file's native `description` property. This field safely supports up to 32,000 characters and makes the deep facts natively searchable via the standard Google Drive web UI search bar.
 
 ## 5.4 Google Workspace Batch Operations (Quota Armor)
 When processing Tier 3 historical data, the `ACTIONABLE` worker MUST NOT execute single API calls for every label application or folder move.

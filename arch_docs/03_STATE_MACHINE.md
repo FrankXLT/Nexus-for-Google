@@ -3,13 +3,19 @@
 ## 3.1 The Asynchronous Fusion Engine
 Nexus V3 contains NO linear Python pipelines. Every step of processing is handled by an isolated, asynchronous worker loop that queries `WORKSPACE_ARTIFACTS` for a specific `state`.
 
-### 🟢 `RAW` (Ingress & Interception)
-*   **Trigger:** Webhooks write payload. Returns HTTP 202 instantly.
-*   **Bouncer:** Check `CONFIG_SYSTEM` for `ignored_gmail_categories`. If the payload contains tags like `CATEGORY_PROMOTIONS`, transition immediately to `IGNORED` and bypass all AI.
+###   `SUB` (Pub/Sub Envelope Ingress)
+*   **Trigger:** Google Webhooks hit the API. The API inserts the notification envelope (e.g., Gmail `historyId` or Drive `resourceId`), sets state to `SUB`, and returns HTTP 202 instantly. No file downloading happens here.
+
+###   `RAW` (Payload Hydration)
+*   **Trigger:** Async worker polls for `SUB`.
+*   **Action:** The worker executes the physical Workspace APIs (e.g., `users.messages.get` or Drive metadata fetch) using the envelope IDs to pull the actual text payload or file properties.
+*   **Bouncer:** Checks `CONFIG_SYSTEM` for `ignored_gmail_categories`. If the payload contains tags like `CATEGORY_PROMOTIONS`, transition immediately to `IGNORED`. 
+*   **Outcome:** Drive items transition to `OCR_PENDING`. Email items transition to `TRIAGE`.
 
 ### 🟣 `OCR_PENDING` (Pre-Processing)
 *   **Trigger:** Artifacts identified as Google Drive PDFs/Images.
-*   **Action:** Transmit via API to **Google Cloud Document AI**. Receive structured text, append to `ocr_payload`. Transition to `TRIAGE`.
+*   **Action (The 1GB RAM Law):** The worker MUST NOT read the full file into memory. It streams the file from Google Drive to a local VM disk path (`/opt/nexus/shared/tmp/`). Using a lightweight Python library (e.g., PyMuPDF), it slices only the **first 5 pages** into a truncated PDF. This truncated file is read, encoded to Base64, passed *synchronously* to Google Cloud Document AI, and then the local `/tmp/` files are immediately deleted.
+*   **Outcome:** Structured text is received, appended to `ocr_payload`. Transition to `TRIAGE`.
 
 ### 🟡 `TRIAGE` (Hybrid Routing)
 *   **Trigger:** Text/Email artifacts.
@@ -44,20 +50,20 @@ The following Mermaid sequence dictates EXACTLY how artifacts flow through the S
 sequenceDiagram
     participant Webhook as Webhook Ingress
     participant DB as nexus_core.db
-    participant OCR as OCR Worker
+    participant RawWorker as RAW Hydration Worker
     participant Triage as TRIAGE Worker
-    participant Micro as Flash-8B LLM
-    participant Heavy as Pro LLM
-    participant UI as Quarantine UI
-    participant Action as ACTIONABLE Worker
 
     %% INGRESS & PRE-PROCESSING
-    Webhook->>DB: INSERT Payload (State: RAW)
+    Webhook->>DB: INSERT Envelope (State: SUB)
     
+    DB->>RawWorker: Poll (SUB)
+    RawWorker->>Workspace API: Download Physical Payload (Email Body / File)
+    RawWorker->>DB: UPDATE Payload Text (State: RAW)
+
     alt Source is Google Drive (PDF/Image)
-        DB->>OCR: Poll (RAW)
-        OCR->>DocumentAI: Extract Text
-        OCR->>DB: UPDATE Payload Text (State: TRIAGE)
+        DB->>OCRWorker: Poll (RAW)
+        OCRWorker->>DocumentAI: Extract Text
+        OCRWorker->>DB: UPDATE Payload Text (State: TRIAGE)
     else Source is Gmail
         DB->>Triage: Poll (RAW)
         Triage->>DB: Claim Artifact (State: TRIAGE)
@@ -117,3 +123,19 @@ To prevent LLM API bankruptcy during a batch import, the `TRIAGE` worker MUST en
 - **If YES:** The worker skips the artifact, leaving it parked in `TRIAGE` (Do not send to LLM).
 - **If NO:** The worker advances exactly *one* artifact for that sender to `EVALUATING`. 
 - **The Result:** The heavy LLM evaluates `Target` exactly *once*. The human approves it in `QUARANTINE`. On the next loop, the remaining 999 `Target` emails waiting in `TRIAGE` instantly hit the SQL-Fast-Pass (Permutation A), costing zero API tokens.
+
+### 3.3.4 Sweeper Backpressure & Concurrency (Anti-Lockout)
+When the Sweeper Engine imports thousands of legacy emails, parallel AI workers trying to update those rows will collide.
+*   **Atomic Claiming:** When an async worker claims an artifact (e.g., moving it from `TRIAGE` to `EVALUATING`), it MUST use a `BEGIN IMMEDIATE` transaction or atomic `UPDATE ... RETURNING` syntax. Standard `UPDATE` statements are forbidden to prevent race conditions.
+*   **Sweeper Backpressure:** The Sweeper Engine MUST check the active backlog (`SELECT COUNT(*) FROM WORKSPACE_ARTIFACTS WHERE state IN ('RAW', 'TRIAGE', 'EVALUATING')`). If the count exceeds **250 items**, the Sweeper MUST yield the event loop (`await asyncio.sleep(60)`) to let the AI process the queue, protecting both the LLM API quota and the SQLite lock limits.
+
+## 3.4 The Watchdog Engine (Webhook Renewals)
+Google Workspace push notification channels expire automatically (maximum 7 days for Gmail). To prevent the ingress pipeline from silently dying, Nexus utilizes a background task.
+*   **The Loop:** A `WATCHDOG_ENGINE` loop runs every 12 hours.
+*   **Action:** Queries `WEBHOOK_REGISTRY` for any `channel_id` expiring within the next 48 hours.
+*   **Renewal:** It negotiates a new watch channel with the Google API, saves the new `channel_id` and `expiration_ts` to the database, and calls the API to explicitly `stop` the old, expiring channel.
+
+## 3.5 The Infinite Loop Law (Lifespan vs BackgroundTasks)
+Workers MUST NOT be implemented as FastAPI `BackgroundTasks` triggered by web routes, as they will die when web traffic stops.
+- **Implementation:** All Asynchronous Workers (`TRIAGE`, `SWEEPER`, `WATCHDOG`, `ACTIONABLE`, etc.) MUST be spawned as independent `asyncio.create_task()` loops within the FastAPI `@asynccontextmanager lifespan` hook.
+- **Fault Tolerance:** Every infinite `while True:` worker loop MUST be wrapped in a broad `try/except Exception as e:` block. If a worker encounters a fatal error, it must log the error, execute `await asyncio.sleep(10)`, and continue the loop. Workers are FORBIDDEN from silently crashing and abandoning their thread.
