@@ -28,3 +28,11 @@ The `ACTIONABLE` worker MUST respect the `gmail_sync_mode` string on the `ENTITY
 
 ## 5.3 Data Sovereignty (Drive Metadata Injection)
 When processing Google Drive artifacts, the `ASSIMILATING` worker MUST inject the `canonical_name`, `workspace_alias`, `purpose`, and the extracted RAG JSON facts natively into the Google Drive file `properties` via the API. This ensures files remain queryable even if Nexus is uninstalled.
+
+## 5.4 Google Workspace Batch Operations (Quota Armor)
+When processing Tier 3 historical data, the `ACTIONABLE` worker MUST NOT execute single API calls for every label application or folder move.
+
+The coding agent MUST utilize Google's Batch execution endpoints (referencing the Dead Repo for syntax):
+- **For Gmail:** Use the `users.messages.batchModify` endpoint to apply/remove labels for up to 1,000 messages in a single HTTP request.
+- **For Drive:** Utilize the Google API Client's `BatchHttpRequest` object to group folder moves and property updates.
+- **Trigger:** If the worker detects multiple artifacts in the `ACTIONABLE` state destined for the same mutations, it must bundle them into a single batch network call. All external API calls MUST be wrapped in robust Exponential Backoff (Jitter) handlers to survive temporary rate limits gracefully.

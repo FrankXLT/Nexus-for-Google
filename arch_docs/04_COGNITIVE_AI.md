@@ -56,3 +56,9 @@ sequenceDiagram
     Assim->>Drive: PATCH File Properties (Inject Metadata / JSON)
     Assim->>DB: UPDATE (State: COMPLETED)
 ```
+
+## 4.6 Dedicated Cognitive Prompts
+The coding agent must utilize these specific prompts from `CONFIG_PROMPTS` to prevent LLM hallucination:
+- **`EVALUATE_NOVEL` (Heavy Fusion):** Triggers when `TRIAGE` fails. Uses `gemini-2.5-pro` to evaluate the artifact against the full Category/Purpose `description` columns in the database to deduce a novel taxonomy linkage safely.
+- **`BRAND_GROUNDING` (Entity Profiling):** Triggers when a new Entity is created. Uses `gemini-2.5-flash` with Google Grounding enabled. The prompt strictly asks for the official Canonical Legal Name and the 6-character brand hex color.
+- **`GENERATE_UI_THEME`:** Passes the 5-color user seed palette to `gemini-2.5-pro` to dynamically map HSL spectrum arrays matching the exact count of active Categories and Purposes in the database.

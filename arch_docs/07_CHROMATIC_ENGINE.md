@@ -1,9 +1,18 @@
 # Layer 7: The Generative Chromatic Engine
 
-## 7.1 AI Theme Generation & Dynamic Regeneration
-Coding agents are **FORBIDDEN** from hardcoding UI colors (e.g., `bg-red-500`). All dynamic UI coloring MUST be driven by CSS Variables mapped from the JSON theme matrix.
-1. **The Day 0 Seed:** The system is seeded via `CONFIG_SYSTEM` with a mathematically balanced Dark Mode palette (Backgrounds, 12 Support, 16 Category, and 20 Purpose colors) based on the user's Colormind configuration.
-2. **AI Regeneration (The Scaling Law):** The system does not store empty/placeholder colors. If the user adds a 17th Category or a 21st Purpose, the backend MUST trigger the `GENERATE_UI_THEME` prompt. The LLM will re-evaluate the seed palette and output a perfectly redistributed HSL color wheel array for the exact new count, overwriting the JSON string in the database.
+## 7.1 AI Theme Generation & Database Injection
+Coding agents are **FORBIDDEN** from hardcoding UI colors. All dynamic UI coloring MUST be driven by the database.
+
+1. **The 8 Semantic Support Colors:** The system utilizes exactly 8 operational UI colors stored in `CONFIG_SYSTEM`: 
+   - `primary` (Active tabs/focus rings/brand)
+   - `success` (Completed/OK)
+   - `warning` (Quotas/Alerts)
+   - `error` (Quarantine/Failures/Destructive)
+   - `info` (Toasts/Help)
+   - `muted` (Disabled/Archived text)
+   - `highlight` (Search term matches)
+   - `ai_sparkle` (Gemini evaluation states).
+2. **Database Color Injection (The Scaling Law):** The exact hex colors for taxonomy nodes do NOT live in a disconnected array. When the `GENERATE_UI_THEME` prompt runs, the backend Python worker MUST parse the AI's JSON output and execute a SQL `UPDATE` statement, permanently saving the generated hex codes into the `CATEGORIES.color_hex` and `PURPOSES.color_hex` columns. The frontend SPA queries these tables directly to assign CSS variables.
 
 ## 7.2 Entity Branding & Readability Modding
 Entities utilize True Brand Hex codes extracted via Google Grounding (saved in `ENTITIES.primary_color_hex`). 

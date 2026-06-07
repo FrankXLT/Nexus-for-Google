@@ -1,79 +1,95 @@
 {
   "prompts": [
     { 
-      "prompt_name": "EXTRACT_FINANCE", 
-      "model_tier": "gemini-2.5-pro", 
-      "prompt_text": "Extract the following JSON keys from this financial document: 'Total_Amount' (float), 'Transaction_Date' (YYYY-MM-DD), 'Account_Last_4' (string), and 'Tax_Deductible' (boolean)." 
+      "prompt_name": "EXTRACT_FINANCE", "model_tier": "gemini-2.5-pro", 
+      "prompt_text": "Extract JSON: 'Total_Amount' (float), 'Transaction_Date' (YYYY-MM-DD), 'Account_Last_4' (string), and 'Tax_Deductible' (boolean)." 
     },
     { 
-      "prompt_name": "EXTRACT_RECEIPT", 
-      "model_tier": "gemini-2.5-flash", 
-      "prompt_text": "Extract the following JSON keys from this receipt: 'Vendor_Name' (string), 'Transaction_Date' (YYYY-MM-DD), 'Total_Paid' (float), and 'Line_Items' (array of strings)." 
+      "prompt_name": "EXTRACT_RECEIPT", "model_tier": "gemini-2.5-flash", 
+      "prompt_text": "Extract JSON: 'Vendor_Name' (string), 'Transaction_Date' (YYYY-MM-DD), 'Total_Paid' (float), and 'Line_Items' (array of strings)." 
     },
     { 
-      "prompt_name": "EXTRACT_LOGISTICS", 
-      "model_tier": "gemini-2.5-flash", 
-      "prompt_text": "Extract the following JSON keys from this logistics email: 'Tracking_Number' (string), 'Carrier' (string), 'Estimated_Arrival' (YYYY-MM-DD), and 'Delivery_Status' (string)." 
+      "prompt_name": "EXTRACT_LOGISTICS", "model_tier": "gemini-2.5-flash", 
+      "prompt_text": "Extract JSON: 'Tracking_Number' (string), 'Carrier' (string), 'Estimated_Arrival' (YYYY-MM-DD), and 'Delivery_Status' (string)." 
     },
     { 
-      "prompt_name": "EXTRACT_DISCUSSION", 
-      "model_tier": "gemini-2.5-flash", 
-      "prompt_text": "Extract the following JSON keys from this thread: 'Platform' (string), 'Thread_Title' (string), 'Active_Participants' (array of strings), and 'Action_Required' (boolean)." 
+      "prompt_name": "EXTRACT_HEALTH", "model_tier": "gemini-2.5-pro", 
+      "prompt_text": "Extract JSON: 'Patient_Name' (string), 'Provider' (string), 'Service_Date' (YYYY-MM-DD), 'Patient_Responsibility' (float), and 'Diagnosis_Codes' (array)." 
     },
     { 
-      "prompt_name": "TRIAGE_ROUTER", 
-      "model_tier": "gemini-2.5-flash-8b", 
-      "prompt_text": "Evaluate the provided artifact. Using strictly the provided Categories and Purposes, deduce the exact Category, Entity Name, Sub-Entity Name (if applicable), and Purpose. Evaluate true importance. Return JSON format: {\"category\": \"string\", \"entity_name\": \"string\", \"sub_entity\": \"string\", \"purpose\": \"string\", \"is_important\": boolean}." 
+      "prompt_name": "EXTRACT_CONTRACT", "model_tier": "gemini-2.5-pro", 
+      "prompt_text": "Extract JSON: 'Effective_Date' (YYYY-MM-DD), 'Parties_Involved' (array), 'Key_Obligations' (array), and 'Signatures_Present' (boolean)." 
     },
     { 
-      "prompt_name": "GENERATE_UI_THEME", 
-      "model_tier": "gemini-2.5-pro", 
-      "prompt_text": "You are a Material Design 3 UI/UX designer. I will provide a seed palette of 5 hex codes and a Light/Dark preference. Generate a complete JSON design system. Calculate bg_base and bg_surface for max readability outside the seed. Generate 12 support colors, and step through the HSL spectrum to generate exact counts of distinct Category colors and matte Purpose colors. Output strictly valid JSON matching the system schema." 
+      "prompt_name": "EXTRACT_UTILITY", "model_tier": "gemini-2.5-flash", 
+      "prompt_text": "Extract JSON: 'Billing_Period_Start' (YYYY-MM-DD), 'Billing_Period_End' (YYYY-MM-DD), 'Usage_Amount' (string), and 'Amount_Due' (float)." 
+    },
+    { 
+      "prompt_name": "EXTRACT_DISCUSSION", "model_tier": "gemini-2.5-flash", 
+      "prompt_text": "Extract JSON: 'Platform' (string), 'Thread_Title' (string), 'Active_Participants' (array), and 'Action_Required' (boolean)." 
+    },
+    { 
+      "prompt_name": "TRIAGE_ROUTER", "model_tier": "gemini-2.5-flash-8b", 
+      "prompt_text": "Evaluate the artifact snippet. Using strictly the provided known historical Purposes for this Entity, return the single best matching Purpose. Return JSON: {\"purpose\": \"string\", \"is_important\": boolean}." 
+    },
+    { 
+      "prompt_name": "EVALUATE_NOVEL", "model_tier": "gemini-2.5-pro", 
+      "prompt_text": "Novel artifact detected. Read the provided strict taxonomy descriptions. Deduce Category, Entity, Sub-Entity, and Purpose. Return JSON: {\"category\": \"string\", \"entity_name\": \"string\", \"sub_entity\": \"string\", \"purpose\": \"string\", \"is_important\": boolean}." 
+    },
+    { 
+      "prompt_name": "BRAND_GROUNDING", "model_tier": "gemini-2.5-flash", 
+      "prompt_text": "Use Google Search Grounding to find the provided corporate entity. Return their official Canonical Legal Name and Primary Brand Hex Color. Return JSON: {\"canonical_name\": \"string\", \"primary_color_hex\": \"#XXXXXX\"}." 
+    },
+    { 
+      "prompt_name": "GENERATE_UI_THEME", "model_tier": "gemini-2.5-pro", 
+      "prompt_text": "Material Design 3 Theme Generator. Given the user seed palette, calculate bg_base and bg_surface. Output exactly 8 support colors. Step through the HSL spectrum to generate distinct Category colors and matte Purpose colors matching the requested counts. Output valid JSON." 
     }
   ],
   "categories": [
-    { "id": 1, "name": "Finance", "extraction_prompt_name": "EXTRACT_FINANCE", "top_entities_limit": 15, "gmail_sync_mode": "FULL" },
-    { "id": 2, "name": "Health", "extraction_prompt_name": null, "top_entities_limit": 10, "gmail_sync_mode": "FULL" },
-    { "id": 3, "name": "Publication", "extraction_prompt_name": null, "top_entities_limit": 10, "gmail_sync_mode": "OMIT_PURPOSE" },
-    { "id": 4, "name": "Gaming", "extraction_prompt_name": null, "top_entities_limit": 10, "gmail_sync_mode": "FULL" },
-    { "id": 5, "name": "Productivity", "extraction_prompt_name": null, "top_entities_limit": 15, "gmail_sync_mode": "FULL" },
-    { "id": 6, "name": "Shopping", "extraction_prompt_name": "EXTRACT_RECEIPT", "top_entities_limit": 15, "gmail_sync_mode": "FULL" },
-    { "id": 7, "name": "Utility", "extraction_prompt_name": null, "top_entities_limit": 10, "gmail_sync_mode": "FULL" },
-    { "id": 8, "name": "Personal", "extraction_prompt_name": null, "top_entities_limit": 15, "gmail_sync_mode": "HIDDEN" },
-    { "id": 9, "name": "Streaming", "extraction_prompt_name": null, "top_entities_limit": 10, "gmail_sync_mode": "OMIT_PURPOSE" },
-    { "id": 10, "name": "Dining", "extraction_prompt_name": "EXTRACT_RECEIPT", "top_entities_limit": 15, "gmail_sync_mode": "FULL" },
-    { "id": 11, "name": "Government", "extraction_prompt_name": null, "top_entities_limit": 10, "gmail_sync_mode": "FULL" },
-    { "id": 12, "name": "Business", "extraction_prompt_name": null, "top_entities_limit": 15, "gmail_sync_mode": "FULL" },
-    { "id": 13, "name": "Travel", "extraction_prompt_name": "EXTRACT_LOGISTICS", "top_entities_limit": 15, "gmail_sync_mode": "FULL" },
-    { "id": 14, "name": "Education", "extraction_prompt_name": null, "top_entities_limit": 10, "gmail_sync_mode": "FULL" },
-    { "id": 15, "name": "Activity", "extraction_prompt_name": null, "top_entities_limit": 10, "gmail_sync_mode": "FULL" },
-    { "id": 16, "name": "Community", "extraction_prompt_name": "EXTRACT_DISCUSSION", "top_entities_limit": 15, "gmail_sync_mode": "OMIT_PURPOSE" }
+    { "id": 1, "name": "Finance", "description": "Institutions managing monetary assets, banking, credit reporting, tax compliance, and wealth management.", "extraction_prompt_name": "EXTRACT_FINANCE", "top_entities_limit": 15, "gmail_sync_mode": "FULL", "color_hex": "#D27073" },
+    { "id": 2, "name": "Health", "description": "Medical providers, pharmacies, dental, wellness services, and medical test results. Excludes Insurance.", "extraction_prompt_name": "EXTRACT_HEALTH", "top_entities_limit": 10, "gmail_sync_mode": "FULL", "color_hex": "#C96D85" },
+    { "id": 3, "name": "Publication", "description": "Editorial content, newsletters, news aggregators, and digital magazines.", "extraction_prompt_name": null, "top_entities_limit": 10, "gmail_sync_mode": "OMIT_PURPOSE", "color_hex": "#C26A8F" },
+    { "id": 4, "name": "Gaming", "description": "Video game storefronts, tabletop game publishers, and gaming platforms.", "extraction_prompt_name": null, "top_entities_limit": 10, "gmail_sync_mode": "FULL", "color_hex": "#B2699B" },
+    { "id": 5, "name": "Productivity", "description": "Purpose-driven work, GitHub repositories, SaaS tools, task management, and automated system alerts.", "extraction_prompt_name": null, "top_entities_limit": 15, "gmail_sync_mode": "FULL", "color_hex": "#9D68A5" },
+    { "id": 6, "name": "Shopping", "description": "Retail merchants, e-commerce platforms, and digital storefronts delivering physical goods.", "extraction_prompt_name": "EXTRACT_RECEIPT", "top_entities_limit": 15, "gmail_sync_mode": "FULL", "color_hex": "#8569AB" },
+    { "id": 7, "name": "Utility", "description": "Essential residential or infrastructure services: internet, electricity, water, and waste management.", "extraction_prompt_name": "EXTRACT_UTILITY", "top_entities_limit": 10, "gmail_sync_mode": "FULL", "color_hex": "#6E68A8" },
+    { "id": 8, "name": "Personal", "description": "Direct, 1-to-1 communications from individual human beings, family members, and personal friends.", "extraction_prompt_name": null, "top_entities_limit": 15, "gmail_sync_mode": "HIDDEN", "color_hex": "#5A65A4" },
+    { "id": 9, "name": "Streaming", "description": "Digital entertainment platforms, video/audio streaming subscriptions, and media services.", "extraction_prompt_name": null, "top_entities_limit": 10, "gmail_sync_mode": "OMIT_PURPOSE", "color_hex": "#4B6B9B" },
+    { "id": 10, "name": "Dining", "description": "Restaurants, food delivery networks, coffee shops, and dining reservations.", "extraction_prompt_name": "EXTRACT_RECEIPT", "top_entities_limit": 15, "gmail_sync_mode": "FULL", "color_hex": "#436F90" },
+    { "id": 11, "name": "Government", "description": "Federal, state, and local municipal authorities, including the DMV, postal services, and regulatory agencies.", "extraction_prompt_name": null, "top_entities_limit": 10, "gmail_sync_mode": "FULL", "color_hex": "#487585" },
+    { "id": 12, "name": "Business", "description": "Employer communications, professional associations, HR portals, and B2B operational contacts.", "extraction_prompt_name": "EXTRACT_CONTRACT", "top_entities_limit": 15, "gmail_sync_mode": "FULL", "color_hex": "#507B7A" },
+    { "id": 13, "name": "Travel", "description": "Travel logistics, airlines, hotel accommodations, ride-sharing, and transit authorities.", "extraction_prompt_name": "EXTRACT_LOGISTICS", "top_entities_limit": 15, "gmail_sync_mode": "FULL", "color_hex": "#587F6E" },
+    { "id": 14, "name": "Education", "description": "Schools, academic institutions, and student educational programs.", "extraction_prompt_name": null, "top_entities_limit": 10, "gmail_sync_mode": "FULL", "color_hex": "#608362" },
+    { "id": 15, "name": "Activity", "description": "In-person events, dance studios, concerts, and recreational activities excluding digital streaming.", "extraction_prompt_name": null, "top_entities_limit": 10, "gmail_sync_mode": "FULL", "color_hex": "#688556" },
+    { "id": 16, "name": "Community", "description": "Casual social groups, cocktail-party style conversations, Discord servers, and non-work forums.", "extraction_prompt_name": "EXTRACT_DISCUSSION", "top_entities_limit": 15, "gmail_sync_mode": "OMIT_PURPOSE", "color_hex": "#71874C" },
+    { "id": 17, "name": "Insurance", "description": "Risk management, coverage policies, auto/home/renters/life insurance, and Explanation of Benefits.", "extraction_prompt_name": "EXTRACT_HEALTH", "top_entities_limit": 15, "gmail_sync_mode": "FULL", "color_hex": "#7A8744" }
   ],
   "purposes": [
-    { "id": 1, "name": "Receipt", "allowed_category_ids": "[6, 10, 13]", "extraction_prompt_name": "EXTRACT_RECEIPT", "is_gmail_shortcut": true },
-    { "id": 2, "name": "Invoice", "allowed_category_ids": "[1, 5, 12]", "extraction_prompt_name": "EXTRACT_FINANCE", "is_gmail_shortcut": false },
-    { "id": 3, "name": "Statement", "allowed_category_ids": "[1, 7, 12]", "extraction_prompt_name": null, "is_gmail_shortcut": false },
-    { "id": 4, "name": "Tax", "allowed_category_ids": "[1, 11, 12]", "extraction_prompt_name": null, "is_gmail_shortcut": true },
-    { "id": 5, "name": "Quote", "allowed_category_ids": "[5, 6, 12]", "extraction_prompt_name": null, "is_gmail_shortcut": false },
-    { "id": 6, "name": "Order", "allowed_category_ids": "[4, 6, 9, 10]", "extraction_prompt_name": null, "is_gmail_shortcut": false },
-    { "id": 7, "name": "Delivery", "allowed_category_ids": "[6, 10, 13]", "extraction_prompt_name": "EXTRACT_LOGISTICS", "is_gmail_shortcut": true },
-    { "id": 8, "name": "Account", "allowed_category_ids": "[]", "extraction_prompt_name": null, "is_gmail_shortcut": false },
-    { "id": 9, "name": "Alert", "allowed_category_ids": "[]", "extraction_prompt_name": null, "is_gmail_shortcut": true },
-    { "id": 10, "name": "Support", "allowed_category_ids": "[]", "extraction_prompt_name": null, "is_gmail_shortcut": false },
-    { "id": 11, "name": "Contract", "allowed_category_ids": "[8, 11, 12]", "extraction_prompt_name": null, "is_gmail_shortcut": false },
-    { "id": 12, "name": "Policy", "allowed_category_ids": "[2, 11, 12, 13]", "extraction_prompt_name": null, "is_gmail_shortcut": false },
-    { "id": 13, "name": "Report", "allowed_category_ids": "[1, 5, 12, 14]", "extraction_prompt_name": null, "is_gmail_shortcut": false },
-    { "id": 14, "name": "Result", "allowed_category_ids": "[2, 14]", "extraction_prompt_name": null, "is_gmail_shortcut": false },
-    { "id": 15, "name": "Message", "allowed_category_ids": "[8, 12]", "extraction_prompt_name": null, "is_gmail_shortcut": false },
-    { "id": 16, "name": "Newsletter", "allowed_category_ids": "[3, 16]", "extraction_prompt_name": null, "is_gmail_shortcut": false },
-    { "id": 17, "name": "Promo", "allowed_category_ids": "[4, 6, 9, 10, 13, 15]", "extraction_prompt_name": null, "is_gmail_shortcut": false },
-    { "id": 18, "name": "Itinerary", "allowed_category_ids": "[13]", "extraction_prompt_name": null, "is_gmail_shortcut": true },
-    { "id": 19, "name": "Ticket", "allowed_category_ids": "[4, 13, 15]", "extraction_prompt_name": null, "is_gmail_shortcut": false },
-    { "id": 20, "name": "Discussion", "allowed_category_ids": "[4, 5, 14, 16]", "extraction_prompt_name": "EXTRACT_DISCUSSION", "is_gmail_shortcut": false }
+    { "id": 1, "name": "Receipt", "description": "Proof of a completed payment or transaction.", "allowed_category_ids": "[6, 10, 13]", "extraction_prompt_name": "EXTRACT_RECEIPT", "is_gmail_shortcut": true, "color_hex": "#9A5B5D" },
+    { "id": 2, "name": "Invoice", "description": "A formal request for payment owed before goods/services are finalized.", "allowed_category_ids": "[1, 5, 7, 12, 17]", "extraction_prompt_name": "EXTRACT_FINANCE", "is_gmail_shortcut": false, "color_hex": "#965A65" },
+    { "id": 3, "name": "Statement", "description": "Periodic summary of account activity, balances, or wealth generation.", "allowed_category_ids": "[1, 7, 12]", "extraction_prompt_name": null, "is_gmail_shortcut": false, "color_hex": "#91596D" },
+    { "id": 4, "name": "Tax", "description": "Government revenue, compliance documents, W-2s, and 1099s.", "allowed_category_ids": "[1, 11, 12]", "extraction_prompt_name": null, "is_gmail_shortcut": true, "color_hex": "#8A5874" },
+    { "id": 5, "name": "Quote", "description": "A pre-transaction estimate or bid for services.", "allowed_category_ids": "[5, 6, 12, 17]", "extraction_prompt_name": null, "is_gmail_shortcut": false, "color_hex": "#82587A" },
+    { "id": 6, "name": "Order", "description": "Confirmation that a purchase request was received but not yet fulfilled.", "allowed_category_ids": "[4, 6, 9, 10]", "extraction_prompt_name": null, "is_gmail_shortcut": false, "color_hex": "#785980" },
+    { "id": 7, "name": "Delivery", "description": "Tracking numbers, physical logistics, and shipping updates.", "allowed_category_ids": "[6, 10, 13]", "extraction_prompt_name": "EXTRACT_LOGISTICS", "is_gmail_shortcut": true, "color_hex": "#6E5A84" },
+    { "id": 8, "name": "Account", "description": "Routine system administration, password resets, and Terms of Service updates.", "allowed_category_ids": "[]", "extraction_prompt_name": null, "is_gmail_shortcut": false, "color_hex": "#635A86" },
+    { "id": 9, "name": "Alert", "description": "Urgent anomalies requiring immediate attention (e.g., fraud warnings, server down).", "allowed_category_ids": "[]", "extraction_prompt_name": null, "is_gmail_shortcut": true, "color_hex": "#595C87" },
+    { "id": 10, "name": "Support", "description": "Customer service interactions, helpdesk tickets, and troubleshooting.", "allowed_category_ids": "[]", "extraction_prompt_name": null, "is_gmail_shortcut": false, "color_hex": "#505E85" },
+    { "id": 11, "name": "Contract", "description": "Legally binding agreements, NDAs, and signed documents.", "allowed_category_ids": "[8, 11, 12]", "extraction_prompt_name": "EXTRACT_CONTRACT", "is_gmail_shortcut": false, "color_hex": "#486082" },
+    { "id": 12, "name": "Policy", "description": "Long-term coverage documents, warranties, and terms of insurance.", "allowed_category_ids": "[2, 11, 12, 13, 17]", "extraction_prompt_name": null, "is_gmail_shortcut": false, "color_hex": "#43637D" },
+    { "id": 13, "name": "Report", "description": "Analytical summaries. Medical test results for Health, Credit scores for Finance.", "allowed_category_ids": "[1, 2, 5, 12, 14]", "extraction_prompt_name": null, "is_gmail_shortcut": false, "color_hex": "#416578" },
+    { "id": 14, "name": "Result", "description": "Official outputs from diagnostic, academic, or professional testing.", "allowed_category_ids": "[2, 14]", "extraction_prompt_name": null, "is_gmail_shortcut": false, "color_hex": "#426772" },
+    { "id": 15, "name": "Message", "description": "Direct, 1-on-1 private human correspondence.", "allowed_category_ids": "[8, 12]", "extraction_prompt_name": null, "is_gmail_shortcut": false, "color_hex": "#45696C" },
+    { "id": 16, "name": "Newsletter", "description": "Subscribed, recurring informational broadcasts.", "allowed_category_ids": "[3, 16]", "extraction_prompt_name": null, "is_gmail_shortcut": false, "color_hex": "#496B65" },
+    { "id": 17, "name": "Promo", "description": "Marketing, coupons, sales, and advertisements.", "allowed_category_ids": "[4, 6, 9, 10, 13, 15]", "extraction_prompt_name": null, "is_gmail_shortcut": false, "color_hex": "#4E6D5F" },
+    { "id": 18, "name": "Itinerary", "description": "Chronological schedules for travel, flights, or rentals.", "allowed_category_ids": "[13]", "extraction_prompt_name": null, "is_gmail_shortcut": true, "color_hex": "#536E58" },
+    { "id": 19, "name": "Ticket", "description": "Explicit entry passes containing barcodes or seat assignments for events.", "allowed_category_ids": "[4, 13, 15]", "extraction_prompt_name": null, "is_gmail_shortcut": false, "color_hex": "#586E52" },
+    { "id": 20, "name": "Discussion", "description": "Multi-party threads, open-source pull requests, and forum replies.", "allowed_category_ids": "[4, 5, 14, 16]", "extraction_prompt_name": "EXTRACT_DISCUSSION", "is_gmail_shortcut": false, "color_hex": "#5E6F4C" },
+    { "id": 21, "name": "Claim", "description": "Formal requests to an insurance company for coverage, compensation, or EOBs.", "allowed_category_ids": "[2, 17]", "extraction_prompt_name": "EXTRACT_HEALTH", "is_gmail_shortcut": true, "color_hex": "#636F46" }
   ],
   "system_config": [
     { "key": "ignored_gmail_categories", "value_json": "[\"CATEGORY_PROMOTIONS\", \"CATEGORY_SOCIAL\", \"CATEGORY_FORUMS\"]" },
     { "key": "domain_blocklist", "value_json": "[\"calendar-notification@google.com\", \"no-reply@*\"]" },
-    { "key": "ui_theme_active", "value_json": "{\"theme_name\":\"Colormind Material Dark\",\"mode\":\"dark\",\"core_ui\":{\"bg_base\":\"#121215\",\"bg_surface\":\"#1E1E24\",\"text_main\":\"#F5F5F7\",\"text_muted\":\"#8B949E\",\"border\":\"#2A2D35\"},\"support\":{\"critical\":\"#E85A5A\",\"error\":\"#D27073\",\"warning\":\"#FBBF24\",\"attention\":\"#FDE047\",\"success\":\"#34D399\",\"stable\":\"#10B981\",\"info\":\"#556D8C\",\"system\":\"#6A5AA9\",\"highlight\":\"#FFF176\",\"premium\":\"#25275E\"},\"categories_16\":[\"#D27073\",\"#C96D85\",\"#B86B98\",\"#9F6AA8\",\"#806AB2\",\"#6A5AA9\",\"#5760A4\",\"#4A669C\",\"#436C91\",\"#556D8C\",\"#457685\",\"#3A7D79\",\"#3A8268\",\"#478556\",\"#5C8645\",\"#748538\"],\"purposes_20\":[\"#9A5B5D\",\"#95596A\",\"#8D5878\",\"#805885\",\"#70598E\",\"#5E5A93\",\"#4F5D93\",\"#45618F\",\"#3F6688\",\"#406980\",\"#456B77\",\"#4D6B6D\",\"#556A63\",\"#5C6A5A\",\"#636852\",\"#69664C\",\"#6E6348\",\"#725F46\",\"#745A46\",\"#745548\"]}" }
+    { "key": "ui_theme_support", "value_json": "{\"bg_base\":\"#121215\",\"bg_surface\":\"#1E1E24\",\"primary\":\"#6A5AA9\",\"success\":\"#34D399\",\"error\":\"#D27073\",\"warning\":\"#FBBF24\",\"info\":\"#556D8C\",\"muted\":\"#8B949E\",\"highlight\":\"#FFF176\",\"ai_sparkle\":\"#FABC12\"}" }
   ]
 }

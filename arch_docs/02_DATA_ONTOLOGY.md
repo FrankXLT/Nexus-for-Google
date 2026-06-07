@@ -37,6 +37,7 @@ erDiagram
     CONFIG_PROMPTS {
         TEXT prompt_name PK ""
         TEXT model_tier ""
+        TEXT prompt_text ""
     }
     CONFIG_SYSTEM {
         TEXT key PK ""
@@ -45,6 +46,8 @@ erDiagram
     CATEGORIES {
         INTEGER id PK ""
         TEXT name "Strictly One Word"
+        TEXT description "1-3 sentences guiding the LLM"
+        TEXT color_hex "Assigned via AI Theme Generator"
         INTEGER extraction_prompt_id FK ""
         INTEGER top_entities_limit ""
         TEXT gmail_sync_mode ""
@@ -55,7 +58,7 @@ erDiagram
         INTEGER parent_entity_id FK "Supports Sub-Entities"
         TEXT canonical_name ""
         TEXT workspace_alias ""
-        TEXT primary_color_hex ""
+        TEXT primary_color_hex "Via Google Grounding"
         TEXT gmail_sync_mode ""
     }
     ALIASES {
@@ -66,6 +69,8 @@ erDiagram
     PURPOSES {
         INTEGER id PK ""
         TEXT name "Strictly One Word"
+        TEXT description "1-3 sentences guiding the LLM"
+        TEXT color_hex "Assigned via AI Theme Generator"
         TEXT allowed_category_ids ""
         INTEGER extraction_prompt_id FK ""
         BOOLEAN is_gmail_shortcut ""
@@ -94,6 +99,9 @@ erDiagram
         TEXT id PK ""
         TEXT mapped_linkage_id FK ""
         TEXT thread_id ""
+        TEXT source_sender "Raw email/domain for batch deduplication"
+        TEXT context_hint "Legacy folder/label string for LLM"
+        INTEGER priority "1=Live Webhook, 2=UI Staging, 3=Sweeper"
         BOOLEAN nexus_important ""
         BOOLEAN nexus_starred ""
         TEXT ui_summary ""

@@ -25,21 +25,76 @@ Administrative interface for managing `TAXONOMY_LINKAGES`.
 - **Flow View:** Visual nodes/cards for merging aliases or re-parenting entities.
 - **Matrix View:** Infinite-scroll, virtualized data grid of linkages with Excel-style inline dropdowns to rapidly bulk-edit `gmail_sync_mode` or Purpose mapping.
 
-## 6.5 The Aesthetic Law (Material Design Dashboard)
-The frontend MUST strictly adhere to the following design language, inspired by modern Material Dashboards. The default theme is **Dark Mode**.
+## 6.5 The Aesthetic Law (Material Dashboard)
+The frontend MUST strictly adhere to a modern Material Dashboard design language (e.g., Creative Tim). The default theme is **Dark Mode**.
 
 ### 6.5.1 CSS & Component Styling
-1. **Dual-Layer Dark Mode:** The app background (`bg_base`) must be a deep, dark charcoal/black. The cards (`bg_surface`) must be a slightly elevated, lighter dark hue (e.g., deep navy/slate) to create depth without harsh borders.
-2. **Floating Offset Headers:** Dashboard cards containing charts or metrics MUST feature a colored, offset square header (floating slightly above and outside the top-left or top-center of the main card container) containing an icon and a soft drop-shadow.
+1. **Dual-Layer Dark Mode:** The app background (`bg_base`) must be a deep, dark charcoal/black. The UI cards (`bg_surface`) must be a slightly elevated, lighter dark hue to create depth without harsh borders.
+2. **Floating Offset Headers:** Dashboard cards containing charts, tables, or metrics MUST feature a colored, offset square header (floating slightly above and outside the top-left or top-center of the main card container) containing an icon and a soft drop-shadow.
 3. **Elevation:** Strict use of soft CSS box-shadows to define Z-index elevation. Flat, border-only designs for major containers are forbidden.
 
-### 6.5.2 SVG Icon Mapping
-The coding agent MUST use the specific SVGs provided in the `/images/` directory. Do not use external icon fonts.
-- **`search_icon.svg`, `gmail_icon.svg`, `google_drive_icon.svg`**: Used inside the Omnibox for the multi-source proxy toggle.
-- **`heatmap_icon.svg`**: Used as the offset header icon for the VQB Activity Heatmap card.
-- **`taxonomy_flow_icon.svg` & `flow-branch-svgrepo-com.svg`**: Used in the VQB Sankey diagram toggles.
-- **`knowledge_graph_icon.svg`**: Used in the Tri-Mode toggle to select the Masonry Card view.
-- **`treemap_graph_icon.svg`**: Used in the Tri-Mode toggle to select the Volumetric Drill-Down view.
-- **`taxonomy_table.svg` & `taxonomy_linkages_icon.svg`**: Used in the Zero Trust Settings Console.
-- **`alert_quaratine.svg`**: Used as a flashing red indicator in the Global Notifier and the Heatmap.
-- **`bookmark_filled_icon.svg` / `bookmark_unfilled_icon.svg`**: Used to toggle the `nexus_starred` 7-day velocity state.
+### 6.5.2 SVG Icon Mapping (The Asset Vault)
+The coding agent MUST strictly use the specific SVGs provided in the `/IMAGES/` directory. External web-font libraries (e.g., FontAwesome) are strictly forbidden to ensure offline capability and asset control.
+
+**Core Navigation & UI Controls:**
+- `menu.svg` & `menu-dots.svg`: Collapsing the left navigation sidebar or opening context menus.
+- `user-round-svgrepo.svg`: Top-right profile and authentication state.
+- `setting-config.svg` (or `settings-gear-options-preferences-configuration.svg`): Triggering the Zero Trust Settings modal.
+- `sync-svgrepo-com.svg`: Manual UI state refreshes and polling indicators.
+- `close-ellipse.svg`: Dismissing modals, notifications, or deleting Omnibox chips.
+- `chevron-*.svg` (The entire suite including `double` and `selector` variants): Used for expanding Treemap nodes, dropdowns, and pagination.
+- `filter.svg` & `filter-xmark.svg`: Column filtering in the Taxonomy Matrix.
+- `open-external.svg`: Used on artifact cards to deep-link out to the native Workspace file.
+
+**Search & Core Modes:**
+- `search_icon.svg`, `gmail_icon.svg`, `google_drive_icon.svg`: Used inside the Omnibox for the multi-source proxy toggle.
+- `knowledge_graph_icon.svg`: Tri-Mode toggle (Masonry Card view).
+- `treemap_graph_icon.svg`: Tri-Mode toggle (Volumetric Drill-Down view).
+
+**Data Visualization & Dashboards:**
+- `heatmap_icon.svg`, `stats-svgrepo-com.svg`: Used as offset header icons for Activity and Metrics cards.
+- `taxonomy_flow_icon.svg`, `flow-branch.svg`: Used in the VQB Sankey diagram toggles.
+
+**Taxonomy Management & Alerts:**
+- `taxonomy_table.svg`, `taxonomy_linkages_icon.svg`: Used in the Zero Trust Settings Console.
+- `alert_quaratine.svg`: Flashing red indicator in the Global Notifier and the Heatmap.
+- `bookmark_filled_icon.svg`, `bookmark_unfilled_icon.svg`: Toggles the `nexus_starred` 7-day velocity state.
+
+**State Indicators & AI:**
+- `google-gemini-logo.svg`: Used as a pulsing "sparkle/magic" indicator when an artifact is actively in the `EVALUATING` or `ASSIMILATING` LLM state.## 6.5 The Aesthetic Law (Material Dashboard)
+The frontend MUST strictly adhere to a modern Material Dashboard design language (e.g., Creative Tim). The default theme is **Dark Mode**.
+
+### 6.5.1 CSS & Component Styling
+1. **Dual-Layer Dark Mode:** The app background (`bg_base`) must be a deep, dark charcoal/black. The UI cards (`bg_surface`) must be a slightly elevated, lighter dark hue to create depth without harsh borders.
+2. **Floating Offset Headers:** Dashboard cards containing charts, tables, or metrics MUST feature a colored, offset square header (floating slightly above and outside the top-left or top-center of the main card container) containing an icon and a soft drop-shadow.
+3. **Elevation:** Strict use of soft CSS box-shadows to define Z-index elevation. Flat, border-only designs for major containers are forbidden.
+
+### 6.5.2 SVG Icon Mapping (The Asset Vault)
+The coding agent MUST strictly use the specific SVGs provided in the `/IMAGES/` directory. External web-font libraries (e.g., FontAwesome) are strictly forbidden to ensure offline capability and asset control.
+
+**Core Navigation & UI Controls:**
+- `menu.svg` & `menu-dots.svg`: Collapsing the left navigation sidebar or opening context menus.
+- `user-round-svgrepo.svg`: Top-right profile and authentication state.
+- `setting-config.svg` (or `settings-gear-options-preferences-configuration.svg`): Triggering the Zero Trust Settings modal.
+- `sync-svgrepo-com.svg`: Manual UI state refreshes and polling indicators.
+- `close-ellipse.svg`: Dismissing modals, notifications, or deleting Omnibox chips.
+- `chevron-*.svg` (The entire suite including `double` and `selector` variants): Used for expanding Treemap nodes, dropdowns, and pagination.
+- `filter.svg` & `filter-xmark.svg`: Column filtering in the Taxonomy Matrix.
+- `open-external.svg`: Used on artifact cards to deep-link out to the native Workspace file.
+
+**Search & Core Modes:**
+- `search_icon.svg`, `gmail_icon.svg`, `google_drive_icon.svg`: Used inside the Omnibox for the multi-source proxy toggle.
+- `knowledge_graph_icon.svg`: Tri-Mode toggle (Masonry Card view).
+- `treemap_graph_icon.svg`: Tri-Mode toggle (Volumetric Drill-Down view).
+
+**Data Visualization & Dashboards:**
+- `heatmap_icon.svg`, `stats-svgrepo-com.svg`: Used as offset header icons for Activity and Metrics cards.
+- `taxonomy_flow_icon.svg`, `flow-branch.svg`: Used in the VQB Sankey diagram toggles.
+
+**Taxonomy Management & Alerts:**
+- `taxonomy_table.svg`, `taxonomy_linkages_icon.svg`: Used in the Zero Trust Settings Console.
+- `alert_quaratine.svg`: Flashing red indicator in the Global Notifier and the Heatmap.
+- `bookmark_filled_icon.svg`, `bookmark_unfilled_icon.svg`: Toggles the `nexus_starred` 7-day velocity state.
+
+**State Indicators & AI:**
+- `google-gemini-logo.svg`: Used as a pulsing "sparkle/magic" indicator when an artifact is actively in the `EVALUATING` or `ASSIMILATING` LLM state.
