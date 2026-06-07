@@ -1,13 +1,9 @@
 # Layer 7: The Generative Chromatic Engine
 
-## 7.1 AI Theme Generation (The Anti-Circus UI Law)
-Coding agents are **FORBIDDEN** from hardcoding Tailwind UI colors (e.g., `bg-red-500`, `text-blue-600`) for structural taxonomy elements or entity badges. All dynamic UI coloring MUST be driven by CSS Variables mapped from an AI-generated JSON theme.
-1. **The Seed:** Users input a 5-10 color hex palette in Settings.
-2. **The Architect:** Nexus sends the seed to the `GENERATE_UI_THEME` prompt. The LLM mathematically calculates and outputs a complete JSON matrix containing:
-   - `background` & `surface` (optimized to sit *outside* the seed palette for max contrast).
-   - 12 `support` semantic colors (success, error, warning) harmonized/hue-shifted to the seed aesthetic.
-   - 36 vibrant `category` colors.
-   - 64 matte/desaturated `purpose` colors.
+## 7.1 AI Theme Generation & Dynamic Regeneration
+Coding agents are **FORBIDDEN** from hardcoding UI colors (e.g., `bg-red-500`). All dynamic UI coloring MUST be driven by CSS Variables mapped from the JSON theme matrix.
+1. **The Day 0 Seed:** The system is seeded via `CONFIG_SYSTEM` with a mathematically balanced Dark Mode palette (Backgrounds, 12 Support, 16 Category, and 20 Purpose colors) based on the user's Colormind configuration.
+2. **AI Regeneration (The Scaling Law):** The system does not store empty/placeholder colors. If the user adds a 17th Category or a 21st Purpose, the backend MUST trigger the `GENERATE_UI_THEME` prompt. The LLM will re-evaluate the seed palette and output a perfectly redistributed HSL color wheel array for the exact new count, overwriting the JSON string in the database.
 
 ## 7.2 Entity Branding & Readability Modding
 Entities utilize True Brand Hex codes extracted via Google Grounding (saved in `ENTITIES.primary_color_hex`). 

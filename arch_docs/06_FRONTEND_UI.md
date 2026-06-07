@@ -24,3 +24,22 @@ Results render below the VQB via lazy-loading grids.
 Administrative interface for managing `TAXONOMY_LINKAGES`.
 - **Flow View:** Visual nodes/cards for merging aliases or re-parenting entities.
 - **Matrix View:** Infinite-scroll, virtualized data grid of linkages with Excel-style inline dropdowns to rapidly bulk-edit `gmail_sync_mode` or Purpose mapping.
+
+## 6.5 The Aesthetic Law (Material Design Dashboard)
+The frontend MUST strictly adhere to the following design language, inspired by modern Material Dashboards. The default theme is **Dark Mode**.
+
+### 6.5.1 CSS & Component Styling
+1. **Dual-Layer Dark Mode:** The app background (`bg_base`) must be a deep, dark charcoal/black. The cards (`bg_surface`) must be a slightly elevated, lighter dark hue (e.g., deep navy/slate) to create depth without harsh borders.
+2. **Floating Offset Headers:** Dashboard cards containing charts or metrics MUST feature a colored, offset square header (floating slightly above and outside the top-left or top-center of the main card container) containing an icon and a soft drop-shadow.
+3. **Elevation:** Strict use of soft CSS box-shadows to define Z-index elevation. Flat, border-only designs for major containers are forbidden.
+
+### 6.5.2 SVG Icon Mapping
+The coding agent MUST use the specific SVGs provided in the `/images/` directory. Do not use external icon fonts.
+- **`search_icon.svg`, `gmail_icon.svg`, `google_drive_icon.svg`**: Used inside the Omnibox for the multi-source proxy toggle.
+- **`heatmap_icon.svg`**: Used as the offset header icon for the VQB Activity Heatmap card.
+- **`taxonomy_flow_icon.svg` & `flow-branch-svgrepo-com.svg`**: Used in the VQB Sankey diagram toggles.
+- **`knowledge_graph_icon.svg`**: Used in the Tri-Mode toggle to select the Masonry Card view.
+- **`treemap_graph_icon.svg`**: Used in the Tri-Mode toggle to select the Volumetric Drill-Down view.
+- **`taxonomy_table.svg` & `taxonomy_linkages_icon.svg`**: Used in the Zero Trust Settings Console.
+- **`alert_quaratine.svg`**: Used as a flashing red indicator in the Global Notifier and the Heatmap.
+- **`bookmark_filled_icon.svg` / `bookmark_unfilled_icon.svg`**: Used to toggle the `nexus_starred` 7-day velocity state.
