@@ -62,9 +62,9 @@ You are an expert Enterprise Software Architect working on Nexus V3. You MUST st
 ### 10. The Docstring Mandate
 - Every Python function and JavaScript action MUST have a strict, formatted docstring explaining its input, output, and exactly which "State" or "Layer" it interacts with.
 
-### 11. The Heritage Law (Using the Dead Repo)
-- The user maintains an adjacent legacy repository (`Nexus-for-Google-DeadRepo`). You may reference it STRICTLY to harvest Google Workspace API syntax, OAuth authentication flows, HTML/CSS scaffolding, and `Code.gs` boilerplate.
-- **The Ban:** You are **FORBIDDEN** from copying database schemas, ETL pipelines, or architectural logic from the Dead Repo. Nexus V3 is a State Machine, not a pipeline. Everything harvested MUST be aggressively refactored to comply with the V3 architecture constraints.
+### 11. The Uncharted Sequence Law (Anti-Hallucination)
+- The exact permutations for artifact processing (Drive vs. Gmail, Known vs. Unknown, Missing Data) are strictly mapped via Mermaid sequence diagrams in the architecture docs.
+- **The Stop Rule:** If you are tasked with building a feature, edge-case, or data flow that is NOT explicitly accounted for in these sequence diagrams, you are **FORBIDDEN** from hallucinating a design or inventing unauthorized state transitions. You MUST stop, explain the missing permutation to the user, and ask for architectural direction to update the diagram before proceeding.
 
 ### 12. The Uncharted Sequence Law (Anti-Hallucination)
 - The exact permutations for artifact processing (Drive vs. Gmail, Known vs. Unknown) and prompt execution are strictly mapped via Mermaid sequence diagrams in Layer 3 (`03_STATE_MACHINE.md`) and Layer 4 (`04_COGNITIVE_AI.md`).

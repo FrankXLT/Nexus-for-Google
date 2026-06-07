@@ -9,13 +9,13 @@ While the logical architecture (CQRS databases and isolated worker loops) is des
 - **Infrastructure:** Google Cloud Platform (GCP) `e2-micro` (Always Free Tier).
 - **Resources:** 2 vCPUs (burstable), 1GB RAM, 30GB Standard Persistent Disk.
 - **The 1GB RAM Survival Mandate:** Running a FastAPI server, asynchronous Python ML wrappers, and two SQLite databases on 1GB of RAM will cause Linux Out-Of-Memory (OOM) kernel panics. The `nexus.sh --provision` script **MUST** create a 2GB OS-level swap file (`/swapfile`). 
-- **Security:** Exposes standard port 443 (HTTPS) for Google Workspace Webhooks and UI polling via a reverse proxy (e.g., Caddy or Nginx). All internal services bind strictly to `localhost`.
+- **Security (UFW & Caddy):** The VM relies on an OS-level Uncomplicated Firewall (`ufw`) allowing ONLY ports `22` (SSH) and `443` (HTTPS). A **Caddy** Reverse Proxy manages automatic Let's Encrypt SSL termination on port `443` (using the user's provided hostname) and routes traffic internally to the FastAPI application.
 
-## 0.3 Operational Boundaries
-Even though all components share a single VM, they maintain strict isolation to honor the State Machine:
-1. **The Ingress API (FastAPI):** Acts strictly as a lightweight receiver. It takes Google Webhooks, drops the JSON payload into `nexus_core.db` as `RAW`, and instantly returns `HTTP 202`. It does *not* wait for AI processing.
-2. **The Fusion Engine (systemd):** Background Python processes that independently poll the databases and execute external API calls to Gemini, Document AI, and Google Workspace.
-3. **The Data Layer:** Local disk access to `/shared/data/nexus_core.db` and `/shared/data/nexus_kb.db`. Both must use `PRAGMA journal_mode=WAL` to ensure heavy extraction workers do not lock the database and block the fast webhook receiver.
+## 0.3 Operational Boundaries (Single-Daemon Model)
+All components share a single VM and run under a single `systemd` process (`nexus.service`) to simplify deployment.
+1. **The Ingress API:** Acts strictly as a lightweight receiver. It takes Google Webhooks, drops the JSON payload into `nexus_core.db` as `RAW`, and instantly returns `HTTP 202`. It does *not* wait for AI processing.
+2. **The Fusion Engine (FastAPI BackgroundTasks):** Asynchronous worker loops run as background tasks within the FastAPI event loop. They poll the databases and execute external API calls to Gemini, Document AI, and Google Workspace.
+3. **The Data Layer:** Local disk access to `/opt/nexus/shared/data/nexus_core.db` and `nexus_kb.db`. Both must use `PRAGMA journal_mode=WAL` to ensure heavy extraction workers do not lock the database and block the fast webhook receiver.
 
 ## 0.4 Mermaid Topology Map
 
@@ -24,51 +24,39 @@ Even though all components share a single VM, they maintain strict isolation to 
 config:
   layout: elk
 ---
-flowchart TD
-    %% External World
-    subgraph External["Public Internet"]
-        GW[Google Workspace Webhooks]
-        UI[Google Apps Script UI]
-        GCP_APIs[Gemini & Document AI APIs]
-    end
+flowchart TB
+ subgraph External["Public Internet"]
+        GW["Google Workspace Webhooks"]
+        UI["Google Apps Script UI"]
+        GCP_APIs["Gemini & Document AI APIs"]
+  end
+ subgraph Daemon["Systemd Process (nexus.service)"]
+    direction TB
+        Ingress["FastAPI Webhook Receiver"]
+        Worker["FastAPI BackgroundTasks\nAsync Polling & Execution"]
+  end
+ subgraph Databases["CQRS Storage (/opt/nexus/shared/)"]
+    direction LR
+        CoreDB[("nexus_core.db")]
+        KBDB[("nexus_kb.db")]
+  end
+ subgraph VM["NODE: The Nexus Core (GCP e2-micro)"]
+    direction TB
+        UFW["UFW Firewall - Port 443 & 22 only"]
+        Caddy@{ label: "Caddy Reverse Proxy\\nLet's Encrypt SSL" }
+        Daemon
+        Databases
+  end
+    Ingress -. Triggers .-> Worker
+    UFW --> Caddy
+    Caddy --> Ingress
+    Ingress -- Writes RAW --> CoreDB
+    Ingress -- Reads UI Queries --> KBDB
+    Worker <--> Databases
+    GW -- HTTPS --> UFW
+    UI -- HTTPS --> UFW
+    Worker -- Outbound HTTPS --> GCP_APIs
 
-    %% Physical VM Boundary
-    subgraph VM["NODE: The Nexus Core (GCP e2-micro)"]
-        direction TB
-        
-        ReverseProxy[Reverse Proxy\nCaddy/Nginx - Port 443]
-        Ingress[FastAPI Webhook Receiver\nlocalhost:8000]
-        
-        subgraph Databases["CQRS Storage (Local Disk)"]
-            direction LR
-            CoreDB[(nexus_core.db)]
-            KBDB[(nexus_kb.db)]
-        end
-        
-        subgraph Workers["Systemd Async Workers"]
-            direction TB
-            W_Edge[Edge Workers\nRAW, TRIAGE]
-            W_Heavy[Heavy Workers\nEVALUATING, ASSIMILATING, ACTIONABLE]
-        end
-        
-        ReverseProxy --> Ingress
-        Ingress -->|Writes RAW| CoreDB
-        Ingress -->|Reads UI Queries| KBDB
-        
-        Workers <--> Databases
-    end
-
-    %% Connections
-    GW -- HTTPS --> ReverseProxy
-    UI -- HTTPS --> ReverseProxy
-    
-    Workers -- Outbound HTTPS --> GCP_APIs
-    
-    classDef public fill:#1e3a8a,stroke:#60a5fa,stroke-width:2px,color:#fff;
-    classDef local fill:#064e3b,stroke:#34d399,stroke-width:2px,color:#fff;
-    classDef storage fill:#7c2d12,stroke:#fb923c,stroke-width:2px,color:#fff;
-    
-    class External public;
-    class VM local;
-    class Databases storage;
+    Caddy@{ shape: rect}
+     Databases:::storage
 ```
