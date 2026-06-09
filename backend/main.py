@@ -6,6 +6,8 @@ from backend.routers import auth, webhooks
 from backend.workers.watchdog import WatchdogWorker
 from backend.workers.raw_worker import RawWorker
 from backend.workers.ocr_worker import OcrWorker
+from backend.workers.triage_worker import TriageWorker
+from backend.workers.evaluating_worker import EvaluatingWorker
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -24,15 +26,25 @@ async def lifespan(app: FastAPI):
     ocr_worker = OcrWorker()
     ocr_task = asyncio.create_task(ocr_worker.run())
     
+    triage_worker = TriageWorker()
+    triage_task = asyncio.create_task(triage_worker.run())
+    
+    evaluating_worker = EvaluatingWorker()
+    evaluating_task = asyncio.create_task(evaluating_worker.run())
+    
     yield
     print("Shutting down background fusion workers...")
     watchdog_task.cancel()
     raw_task.cancel()
     ocr_task.cancel()
+    triage_task.cancel()
+    evaluating_task.cancel()
     try:
         await watchdog_task
         await raw_task
         await ocr_task
+        await triage_task
+        await evaluating_task
     except asyncio.CancelledError:
         pass
 

@@ -149,13 +149,32 @@ class RawWorker:
                 is_ignored = True
                 break
 
+        # Thread Inheritance check FIRST
+        is_inherited = False
+        mapped_linkage_id = None
+        state = 'TRIAGE'
+        nexus_starred = 0
+        current_ts = int(time.time())
+        
+        async with aiosqlite.connect(CORE_DB_PATH, timeout=20.0) as db:
+            cursor = await db.execute("""
+                SELECT mapped_linkage_id FROM WORKSPACE_ARTIFACTS
+                WHERE thread_id = ? AND mapped_linkage_id IS NOT NULL AND id != ?
+                LIMIT 1
+            """, (thread_id, message_id))
+            inherited_row = await cursor.fetchone()
+            
+            if inherited_row:
+                is_inherited = True
+                state = 'ACTIONABLE'
+                nexus_starred = 1
+                mapped_linkage_id = inherited_row[0]
+
         # Extract body
         body_text = self._extract_body(payload)
         
-        # Clean HTML / Quoted replies
-        cleaned_body = self._clean_email_body(body_text)
-
-        current_ts = int(time.time())
+        # Clean HTML / Quoted replies conditionally
+        cleaned_body = self._clean_email_body(body_text, is_inherited)
         
         async with aiosqlite.connect(CORE_DB_PATH, timeout=20.0) as db:
             await db.execute("BEGIN IMMEDIATE")
@@ -168,23 +187,6 @@ class RawWorker:
                 """, (message_id, 'gmail', 'IGNORED', 1, thread_id, source_sender, current_ts, current_ts, None, None))
                 await db.commit()
                 return
-
-            # Thread Inheritance
-            cursor = await db.execute("""
-                SELECT mapped_linkage_id FROM WORKSPACE_ARTIFACTS
-                WHERE thread_id = ? AND mapped_linkage_id IS NOT NULL AND id != ?
-                LIMIT 1
-            """, (thread_id, message_id))
-            inherited = await cursor.fetchone()
-            
-            state = 'TRIAGE'
-            nexus_starred = 0
-            mapped_linkage_id = None
-            
-            if inherited:
-                state = 'ACTIONABLE'
-                nexus_starred = 1
-                mapped_linkage_id = inherited[0]
 
             await db.execute("""
                 INSERT OR IGNORE INTO WORKSPACE_ARTIFACTS
@@ -219,29 +221,32 @@ class RawWorker:
                 body_data = base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
         return body_data
 
-    def _clean_email_body(self, html_content):
+    def _clean_email_body(self, html_content, is_inherited: bool):
         if not html_content:
             return ""
         
         soup = BeautifulSoup(html_content, 'html.parser')
         
-        # Remove quoted replies
-        for div in soup.find_all("div", class_="gmail_quote"):
-            div.decompose()
-            
-        for blockquote in soup.find_all("blockquote"):
-            blockquote.decompose()
+        if is_inherited:
+            # Remove quoted replies ONLY if inherited
+            for div in soup.find_all("div", class_="gmail_quote"):
+                div.decompose()
+                
+            for blockquote in soup.find_all("blockquote"):
+                blockquote.decompose()
             
         text = soup.get_text(separator='\n')
         
-        # Clean lines starting with >
-        lines = text.split('\n')
-        cleaned_lines = []
-        for line in lines:
-            if not line.lstrip().startswith('>'):
-                cleaned_lines.append(line)
+        if is_inherited:
+            # Clean lines starting with > ONLY if inherited
+            lines = text.split('\n')
+            cleaned_lines = []
+            for line in lines:
+                if not line.lstrip().startswith('>'):
+                    cleaned_lines.append(line)
+            text = '\n'.join(cleaned_lines)
                 
-        return '\n'.join(cleaned_lines).strip()
+        return text.strip()
 
     async def _process_drive(self, artifact):
         # A Drive SUB might contain resourceId in context_hint or id is file_id
