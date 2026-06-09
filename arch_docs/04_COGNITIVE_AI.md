@@ -132,12 +132,15 @@ sequenceDiagram
 ```
 
 ### 4.7 Context Window Truncation Strategy
-To prevent token limit exhaustion and kernel panics (e.g., from a 50-page PDF or a 100-reply email thread), the system MUST enforce strict text truncation before passing payloads to the LLM.
-1. Gmail Threads (Reverse Chronological):
-   - Truncate the thread to keep only the most recent messages, up to a strict maximum of 8,000 tokens.
-   - Drop the oldest messages in the thread if they exceed the limit.
-2. **Drive Documents (Formatting & 5-Page Hard Limit):**
-   - Document AI's synchronous endpoint strictly rejects documents over 15 pages.
-   - **Native Google Docs:** Cannot be sliced natively. The worker MUST call the Drive API `export` method with `mimeType='application/pdf'` before proceeding.
-   - **Images (JPEG/PNG):** Bypass the slicer entirely. They are 1-page by definition and passed directly to Document AI via base64.
-   - **PDF Slicing:** All PDFs MUST be sliced locally on disk to the **first 5 pages** before base64 encoding to stay within the 1GB VM memory limit and prevent context hallucination.
+To prevent token limit exhaustion and kernel panics, the system MUST enforce strict text isolation before passing payloads to the LLM.
+
+1. **Header/Body LLM Isolation:** 
+   - When executing Fast-Pass `TRIAGE` routing, the worker MUST ONLY pass `extracted_headers` and the first 1,000 characters of `extracted_body`.
+   - When executing Heavy `EVALUATING` or Deep `ASSIMILATING` (RAG), the worker passes the full `extracted_headers` and up to 8,000 characters of the `extracted_body`.
+2. **Gmail Threads & Quoted Replies:**
+   - To prevent redundant processing of the same conversation, `RawWorker` MUST strip quoted replies (`<div class="gmail_quote">` or lines starting with `>`) from the `extracted_body`.
+3. **Drive Documents (Hybrid Extraction & Limits):**
+   - **Native Google Docs:** Cannot be downloaded natively. The worker MUST call the Drive API `export` method with `mimeType='application/pdf'` before processing.
+   - **Metadata as Headers:** The `OcrWorker` MUST place the `File Name` and `MIME Type` into the `extracted_headers` column as a JSON string, and the extracted text into `extracted_body`.
+   - **Text Extraction:** The `OcrWorker` MUST attempt zero-cost native `PyMuPDF` text extraction first.
+   - **Document AI Chunking:** If falling back to Document AI for scanned documents, PDFs MUST be chunked locally on disk into **15-page batches** to respect Google's synchronous API limits. The text from all chunks is concatenated into the `extracted_body` payload.

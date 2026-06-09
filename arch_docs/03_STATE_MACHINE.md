@@ -4,17 +4,20 @@
 Nexus V3 contains NO linear Python pipelines. Every step of processing is handled by an isolated, asynchronous worker loop that queries `WORKSPACE_ARTIFACTS` for a specific `state`.
 
 ###   `SUB` (Pub/Sub Envelope Ingress)
-*   **Trigger:** Google Webhooks hit the API. The API inserts the notification envelope (e.g., Gmail `historyId` or Drive `resourceId`), sets state to `SUB`, and returns HTTP 202 instantly. No file downloading happens here.
+*   **Trigger:** Google Webhooks hit the API. 
+*   **Action:** The API base64-decodes the Pub/Sub `message.data` payload and inserts the notification envelope JSON (e.g., Gmail `historyId` or Drive `resourceId`) temporarily into the `context_hint` column. Sets state to `SUB` and returns HTTP 202 instantly. No file downloading happens here.
 
 ###   `RAW` (Payload Hydration)
-*   **Trigger:** Async worker polls for `SUB`.
-*   **Action:** The worker executes the physical Workspace APIs (e.g., `users.messages.get` or Drive metadata fetch) using the envelope IDs to pull the actual text payload or file properties.
-*   **Bouncer:** Checks `CONFIG_SYSTEM` for `ignored_gmail_categories`. If the payload contains tags like `CATEGORY_PROMOTIONS`, transition immediately to `IGNORED`. 
-*   **Outcome:** Drive items transition to `OCR_PENDING`. Email items transition to `TRIAGE`.
+*   **The History ID Split & Deduplication Law:** A `SUB` artifact is merely a trigger. For Gmail, the worker unpacks the `historyId` and calls `users.history().list`. For *every* `messageId` found, it fetches the actual text payload. It MUST execute an `INSERT OR IGNORE` where the Primary Key `id` is the physical `messageId` (guaranteeing SQLite deduplication). 
+*   After successfully spawning the artifacts, the worker MUST `DELETE` the original `SUB` trigger row.
+*   **The Header Isolation Law:** To prevent overwhelming downstream LLMs, `RawWorker` MUST split the payload. Vital headers (`From`, `To`, `Subject`, `Date`, `Cc`) are saved strictly to the `extracted_headers` column as a JSON string, while the cleaned HTML/text goes into `extracted_body`.
+*   **Quoted Text Stripping:** `RawWorker` MUST strip quoted historical replies (e.g., `<div class="gmail_quote">`) before saving the net-new message to `extracted_body`.
+*   **The Thread Inheritance Law (Anti-Waste):** Before setting the new message's state to `TRIAGE`, the worker MUST query `WORKSPACE_ARTIFACTS` to see if its `threadId` already exists and has a `mapped_linkage_id`. If it DOES, the new message automatically inherits the `mapped_linkage_id` and bypasses routing entirely, setting its state directly to `ACTIONABLE`.
 
 ### 🟣 `OCR_PENDING` (Pre-Processing)
 *   **Trigger:** Artifacts identified as Google Drive PDFs/Images.
-*   **Action (The 1GB RAM Law):** The worker MUST NOT read the full file into memory. It streams the file from Google Drive to a local VM disk path (`/opt/nexus/shared/tmp/`). Using a lightweight Python library (e.g., PyMuPDF), it slices only the **first 5 pages** into a truncated PDF. This truncated file is read, encoded to Base64, passed *synchronously* to Google Cloud Document AI, and then the local `/tmp/` files are immediately deleted.
+*   **Action (Native-First Chunking):** The worker streams the file to `/tmp/`. It MUST attempt local text extraction first using `PyMuPDF`. If the extracted text is < 50 characters (a scanned document), it falls back to Document AI. To respect Document AI's 15-page synchronous limit, it uses `PyMuPDF` to chunk the PDF into 15-page batches. It sends each sequentially, concatenates the text, and deletes the `/tmp/` files.
+*   **Drive Metadata Injection:** The worker MUST prepend the `File Name` and `MIME Type` to the top of the concatenated OCR text before saving it to `extracted_text` so the LLM has contextual clues about the file.
 *   **Outcome:** Structured text is received, appended to `ocr_payload`. Transition to `TRIAGE`.
 
 ### 🟡 `TRIAGE` (Hybrid Routing)
@@ -40,6 +43,7 @@ Nexus V3 contains NO linear Python pipelines. Every step of processing is handle
 *   **Data Split:** 
     1. Extracts a 1-3 sentence `ui_summary`. Writes to `nexus_core.db`.
     2. Extracts dense JSON key-value facts (e.g., `{"Total": 45.00}`). Writes to `nexus_kb.db`.
+*   **The Text Purge Law:** Once semantic data is successfully extracted, the raw payload is dead weight. To prevent massive database bloat, the worker MUST execute `UPDATE WORKSPACE_ARTIFACTS SET state = 'COMPLETED', extracted_headers = NULL, extracted_body = NULL WHERE id = ?`.*   **The Text Purge Law:** Once semantic data is successfully extracted, the raw payload is dead weight. To prevent massive database bloat, the worker MUST execute `UPDATE WORKSPACE_ARTIFACTS SET state = 'COMPLETED', extracted_headers = NULL, extracted_body = NULL WHERE id = ?`.
 *   **Outcome:** Transition to `COMPLETED`.
 
 ### `ERROR` (The Dead Letter State)
@@ -53,25 +57,27 @@ The following Mermaid sequence dictates EXACTLY how artifacts flow through the S
 
 ```mermaid
 sequenceDiagram
-    participant Webhook as Webhook Ingress
     participant DB as nexus_core.db
     participant RawWorker as RAW Hydration Worker
     participant Triage as TRIAGE Worker
+    participant Heavy as Heavy-LLM
 
     %% INGRESS & PRE-PROCESSING
-    Webhook->>DB: INSERT Envelope (State: SUB)
+    DB->>RawWorker: Poll (SUB)
+    RawWorker->>Workspace API: Download Physical Payload (Email Body / File)
     
     DB->>RawWorker: Poll (SUB)
     RawWorker->>Workspace API: Download Physical Payload (Email Body / File)
     RawWorker->>DB: UPDATE Payload Text (State: RAW)
 
-    alt Source is Google Drive (PDF/Image)
-        DB->>OCRWorker: Poll (RAW)
-        OCRWorker->>DocumentAI: Extract Text
-        OCRWorker->>DB: UPDATE Payload Text (State: TRIAGE)
-    else Source is Gmail
-        DB->>Triage: Poll (RAW)
-        Triage->>DB: Claim Artifact (State: TRIAGE)
+    alt Permutation Zero: Thread Inheritance (0 Tokens)
+        RawWorker->>DB: Query existing thread_id linkage
+        DB-->>RawWorker: Parent Linkage Found!
+        RawWorker->>DB: UPDATE (State: ACTIONABLE, nexus_starred: True)
+    else Source is Drive
+        RawWorker->>DB: UPDATE (State: OCR_PENDING)
+    else Source is Gmail (No Inheritance)
+        RawWorker->>DB: UPDATE (State: TRIAGE)
     end
 
     %% TRIAGE PERMUTATIONS
@@ -137,7 +143,8 @@ When the Sweeper Engine imports thousands of legacy emails, parallel AI workers 
 ## 3.4 The Watchdog Engine (Renewals, Zombies, & Pruning)
 A background task `WATCHDOG_ENGINE` loop runs at defined intervals to ensure systemic health and prevent data bloat.
 1. **Webhook Renewals (Every 12h):** Queries `WEBHOOK_REGISTRY` for any `channel_id` expiring within 48 hours. Negotiates a new watch channel and stops the old one.
-2. **Zombie Reclamation (Every 5m):** Queries `WORKSPACE_ARTIFACTS` for items in an active processing state where `locked_at_ts` is older than 15 minutes. Resets them to `TRIAGE` or `RAW` to release the lock.
+2. **Zombie Reclamation (Every 5m):** Queries `WORKSPACE_ARTIFACTS` for items in an active processing state where `locked_at_ts` is older than 15 minutes. 
+   - **The Anti-Duplication Law:** The Watchdog MUST ONLY execute `UPDATE WORKSPACE_ARTIFACTS SET locked_at_ts = NULL`. It is **STRICTLY FORBIDDEN** from changing the `state` column. Reverting an `ASSIMILATING` artifact back to `TRIAGE` causes duplicate LLM token usage. Dropping the lock allows the correct worker to naturally resume processing.
 3. **Database Telemetry Pruning (Daily):** Reads the `db_audit_retention_days` setting from `CONFIG_SYSTEM` (Default: 90). The Watchdog automatically `DELETE`s rows from `AI_AUDIT_LOGS` where the parent artifact is in the `COMPLETED` or `IGNORED` state and the log is older than the threshold. **The Quarantine Law:** The Watchdog is STRICTLY FORBIDDEN from deleting logs tied to an artifact currently in the `QUARANTINE` or `ERROR` state, regardless of age. If the setting is `0`, deletion is bypassed entirely (Never Delete).
 4. **Drive Quota Management (Daily):** Reads the `drive_log_retention_days` setting (Default: 30). The Watchdog queries the Google Drive API for files in `Nexus_System/Logs/` older than the threshold and permanently deletes them to protect the user's 15GB free tier. If the setting is `0`, deletion is bypassed entirely.
 

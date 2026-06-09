@@ -92,17 +92,22 @@ erDiagram
         INTEGER last_active_ts ""
     }
     WORKSPACE_ARTIFACTS {
-        TEXT id PK ""
+        TEXT id PK "MUST be the physical Gmail messageId or Drive fileId"
+        TEXT source_system "e.g., 'gmail' or 'drive' for UI deep-linking"
         TEXT mapped_linkage_id FK ""
-        TEXT thread_id ""
+        TEXT thread_id "Gmail threadId for inheritance"
         TEXT source_sender "Raw email/domain for batch deduplication"
-        TEXT context_hint "Legacy folder/label string for LLM"
+        TEXT context_hint "Temporarily holds SUB JSON envelope, then legacy folder string for LLMs"
+        TEXT extracted_headers "EPHEMERAL: JSON string of From, To, Subject, Date"
+        TEXT extracted_body "EPHEMERAL: Holds physical text/OCR. Cleared upon COMPLETED."
         INTEGER priority "1=Live Webhook, 2=UI Staging, 3=Sweeper"
         BOOLEAN nexus_important ""
         BOOLEAN nexus_starred ""
         TEXT ui_summary ""
         TEXT state "SUB, RAW, OCR_PENDING, TRIAGE to COMPLETED, ERROR"
         INTEGER locked_at_ts "Epoch timestamp tracking active processing time"
+        INTEGER created_at_ts ""
+        INTEGER updated_at_ts ""
     }
     ARTIFACT_KNOWLEDGE {
         TEXT artifact_id PK, FK ""

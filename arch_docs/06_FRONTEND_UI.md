@@ -6,9 +6,8 @@ To enforce Zero-Trust, prevent "framework thrashing" by AI coding agents, and en
 2. **Data Visualization:** **Mermaid.js** (via React wrapper components) MUST be used for rendering the VQB Taxonomy Sankey flows and linkages.
 3. **Unified Routing (Zero CORS):** The SPA is built statically and served on the root domain (`/`) by the Caddy web server. Caddy acts as a reverse proxy, seamlessly routing all `/api/*` and `/webhook/*` calls back to the FastAPI Python server. Because the browser sees both the UI and the API on the exact same origin, CORS configurations are eliminated.
 4. **Authentication (Google SSO & Strict Allowlist):** The frontend relies on Google Sign-In (OpenID Connect). Passwords are forbidden.
-   - **The Bouncer:** When the frontend passes the Google ID Token to the backend, FastAPI MUST cryptographically verify the token and extract the user's `email`. It strictly checks this against the comma-separated `AUTHORIZED_EMAILS` list in the `.env` file. Unauthorized emails receive an `HTTP 403 Forbidden`.
-   - **Session:** Authorized users receive an internal JWT stored in a secure, `HttpOnly`, `SameSite=Strict` cookie.
-   - **Status Ping:** Because frontend JavaScript cannot read `HttpOnly` cookies (preventing XSS), the backend MUST expose an `/api/auth/status` endpoint. The React SPA silently pings this on initialization/refresh to verify cookie validity and route to the Dashboard.
+   - **The Bouncer:** When the frontend passes the Google ID Token to the backend, FastAPI MUST cryptographically verify the token **using `GOOGLE_CLIENT_ID` as the audience** to prevent token substitution attacks. It then extracts the user's `email` and strictly checks it against the comma-separated `AUTHORIZED_EMAILS` list in `.env`.
+   - **Session:** Authorized users receive an internal PyJWT token **(with a 24-hour expiration)** stored securely as an `HttpOnly`, `Secure`, `SameSite=strict` cookie.
 
 ## 6.2 Rendering Performance Mandates
 The frontend is a Material Design 3 Single Page Application (SPA). To prevent browser memory crashes on massive personal datasets, agents MUST strictly adhere to:
