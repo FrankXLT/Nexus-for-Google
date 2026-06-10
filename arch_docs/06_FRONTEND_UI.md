@@ -3,7 +3,7 @@
 ## 6.1 Hosting, Tech Stack & Authentication Architecture
 To enforce Zero-Trust, prevent "framework thrashing" by AI coding agents, and ensure rendering performance:
 1. **The Technology Stack:** The frontend MUST be built using **Vite + React 18+ + Tailwind CSS**. React has the most mature ecosystem for DOM Virtualization (`react-virtuoso` or `react-window`), which is a mandatory structural law.
-2. **Data Visualization:** **Mermaid.js** (via React wrapper components) MUST be used for rendering the VQB Taxonomy Sankey flows and linkages.
+2. **Data Visualization (ECharts):** **Apache ECharts** (via the `echarts` and `echarts-for-react` packages) MUST be used for rendering the VQB Taxonomy Sankey flows and linkages. `Mermaid.js` is strictly forbidden due to React 18 Strict Mode lifecycle conflicts.
 3. **Unified Routing (Zero CORS):** 
    - **Production:** The SPA is built statically and served by the Caddy web server, which acts as a reverse proxy, seamlessly routing `/api/*` and `/webhook/*` back to FastAPI.
    - **Local Development:** The Vite Dev Server MUST be configured with a `proxy` in `vite.config.js` pointing `/api` and `/webhook` to `http://127.0.0.1:8000` with `changeOrigin: true`. This identically mimics production and entirely eliminates the need for CORS middleware or `SameSite` cookie gymnastics.
@@ -18,12 +18,13 @@ The frontend is a Material Design 3 Single Page Application (SPA). To prevent br
 2. **Server-Side Pagination:** Excel-style sorting and filtering MUST trigger server-side queries using SQL `LIMIT` and `OFFSET`. Fetching `SELECT *` to memory is forbidden.
 3. **Debouncing:** All Omnibox text input and visual filter changes MUST be debounced by 300ms before firing a backend API fetch.
 4. **Optimistic UI:** When a user executes an action (e.g., Approving a Quarantine item), the UI immediately reflects the success state locally, while the actual API call processes asynchronously in the background.
+5. **The Zustand Law:** The native `React Context API` is **STRICTLY FORBIDDEN** for managing highly volatile global state (like `searchQuery`, `viewMode`, or large `artifacts` arrays) because it forces full-tree re-renders. The frontend MUST use **Zustand** for all global dashboard state, allowing components to subscribe to atomic state slices. React Context may only be used for static, read-once providers (like `ThemeProvider` or `AuthProvider`).
 
 ## 6.3 The Homepage (Omnibox & VQB)
 - **The Omnibox (Multi-Source Proxy):** Dropdown toggle sets scope (`🌌 Local Nexus DB`, `📧 Proxy: Gmail`, `📁 Proxy: Google Drive`). Accepts text and visual "Chips".
-- **Visual Query Box (VQB):** 
-  - *Activity Heatmap:* Y-Axis = Top Senders (user-defined limit), X-Axis = Time (Month, Quarter, Year toggles). Colors use True Entity Brand Hex. **Quarantined senders flash RED.** 
-  - *Taxonomy Flow:* Sankey diagram (`Category ➔ Alias ➔ Purpose`). Includes a "Shatter Aliases" toggle to expose sub-entities. Clicking any node drops a Chip into the Omnibox.
+- **Visual Query Box (VQB):**
+   - *Activity Heatmap:* Y-Axis = Top Senders, X-Axis = Time. Colors use True Entity Brand Hex. Quarantined senders flash RED.
+   - *Taxonomy Flow:* Apache ECharts Sankey diagram (`Category -> Alias -> Purpose`). Includes a "Shatter Aliases" toggle to expose sub-entities. Clicking any node drops a Chip into the Omnibox.
 
 ## 6.4 Search Results Engine (Tri-Mode)
 Results render below the VQB via lazy-loading grids.

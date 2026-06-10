@@ -136,10 +136,15 @@ deploy() {
     # Copy all files from current repo, excluding .git
     rsync -a --exclude='.git' ./ "$RELEASE_PATH/"
     
-    # 2. SPA Stub
-    log "Creating SPA Stub..."
-    mkdir -p "$RELEASE_PATH/frontend/dist"
-    echo "<h1>Nexus V3 UI Stub</h1>" > "$RELEASE_PATH/frontend/dist/index.html"
+    # 2. SPA Build
+    log "Building SPA..."
+    if [ -f "$RELEASE_PATH/frontend/package.json" ]; then
+        (cd "$RELEASE_PATH/frontend" && npm install && npm run build)
+    else
+        log "package.json not found, creating UI Stub..."
+        mkdir -p "$RELEASE_PATH/frontend/dist"
+        echo "<h1>Nexus V3 UI Stub</h1>" > "$RELEASE_PATH/frontend/dist/index.html"
+    fi
 
     # 3. Python Virtual Environment
     log "Setting up Python venv..."

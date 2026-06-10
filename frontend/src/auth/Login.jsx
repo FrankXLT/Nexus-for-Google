@@ -1,0 +1,35 @@
+import React from 'react';
+import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
+import axios from 'axios';
+import { useAuth } from './AuthProvider';
+import Icon from '../components/Icon';
+
+const Login = () => {
+    const { login } = useAuth();
+
+    const onSuccess = async (credentialResponse) => {
+        try {
+            await axios.post('/api/auth/google', { token: credentialResponse.credential }, { withCredentials: true });
+            login(credentialResponse.credential);
+        } catch (error) {
+            console.error("Login failed", error);
+        }
+    };
+
+    return (
+        <div className="flex flex-col items-center justify-center min-h-screen bg-bgBase">
+            <div className="p-8 bg-bgSurface rounded-xl shadow-lg flex flex-col items-center">
+                <Icon name="google-gemini-logo" className="w-16 h-16 mb-4" />
+                <h1 className="text-2xl font-bold text-textPrimary mb-6">Nexus Login</h1>
+                <GoogleOAuthProvider clientId="REPLACE_WITH_YOUR_CLIENT_ID">
+                    <GoogleLogin
+                        onSuccess={onSuccess}
+                        onError={() => console.log('Login Failed')}
+                    />
+                </GoogleOAuthProvider>
+            </div>
+        </div>
+    );
+};
+
+export default Login;

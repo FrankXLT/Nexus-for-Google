@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 import asyncio
 
-from backend.routers import auth, webhooks, data, knowledge
+from backend.routers import auth, webhooks, data, knowledge, audit, taxonomy, system
 from backend.workers.watchdog import WatchdogWorker
 from backend.workers.raw_worker import RawWorker
 from backend.workers.ocr_worker import OcrWorker
@@ -72,10 +72,15 @@ app.include_router(auth.router)
 app.include_router(webhooks.router)
 app.include_router(data.router)
 app.include_router(knowledge.router)
+app.include_router(audit.router)
+app.include_router(taxonomy.router)
+app.include_router(system.router)
 
 @app.get("/api/health")
 async def health_check():
     """
     Basic health check endpoint for the Ingress Layer.
     """
+    return {"status": "ok", "layer": "ingress"}
+"""
     return {"status": "ok", "layer": "ingress"}
