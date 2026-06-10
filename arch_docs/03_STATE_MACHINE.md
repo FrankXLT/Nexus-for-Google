@@ -137,8 +137,23 @@ To prevent LLM API bankruptcy during a batch import, the `TRIAGE` worker MUST en
 
 ### 3.3.4 Sweeper Backpressure & Concurrency (Anti-Lockout)
 When the Sweeper Engine imports thousands of legacy emails, parallel AI workers trying to update those rows will collide.
-*   **Atomic Claiming:** When an async worker claims an artifact (e.g., moving it from `TRIAGE` to `EVALUATING`), it MUST use a `BEGIN IMMEDIATE` transaction or atomic `UPDATE ... RETURNING` syntax. Standard `UPDATE` statements are forbidden to prevent race conditions.
-*   **Sweeper Backpressure:** The Sweeper Engine MUST check the active backlog (`SELECT COUNT(*) FROM WORKSPACE_ARTIFACTS WHERE state IN ('RAW', 'TRIAGE', 'EVALUATING')`). If the count exceeds **250 items**, the Sweeper MUST yield the event loop (`await asyncio.sleep(60)`) to let the AI process the queue, protecting both the LLM API quota and the SQLite lock limits.
+*   **Atomic Claiming:** When an async worker claims a single artifact, it MUST use a `BEGIN IMMEDIATE` transaction or atomic `UPDATE ... RETURNING` syntax. 
+*   **Batch Claiming (The CTE Law):** When claiming bulk artifacts (e.g., in `ACTIONABLE` for Gmail batch label application), the worker MUST use a Common Table Expression (CTE) to atomically lock multiple rows that share the exact same routing destination:
+    ```sql
+    WITH TargetLinkage AS (
+        SELECT mapped_linkage_id FROM WORKSPACE_ARTIFACTS 
+        WHERE state = 'ACTIONABLE' AND source_system = 'gmail' AND locked_at_ts IS NULL 
+        ORDER BY priority ASC LIMIT 1
+    )
+    UPDATE WORKSPACE_ARTIFACTS SET locked_at_ts = ? WHERE id IN (
+        SELECT id FROM WORKSPACE_ARTIFACTS 
+        WHERE state = 'ACTIONABLE' AND source_system = 'gmail' AND locked_at_ts IS NULL 
+        AND mapped_linkage_id = (SELECT mapped_linkage_id FROM TargetLinkage)
+        ORDER BY priority ASC
+        LIMIT 100
+    ) RETURNING *;
+    ```
+*   **Sweeper Backpressure:** The Sweeper Engine MUST check the active backlog. If the count exceeds **250 items**, it yields the event loop (`await asyncio.sleep(60)`).
 
 ## 3.4 The Watchdog Engine (Renewals, Zombies, & Pruning)
 A background task `WATCHDOG_ENGINE` loop runs at defined intervals to ensure systemic health and prevent data bloat.

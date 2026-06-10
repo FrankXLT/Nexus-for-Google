@@ -78,11 +78,12 @@ class RawWorker:
             
             if not history_id:
                 # If no historyId, try to see if it has messageId directly (legacy Sweeper)
-                pass 
-                
-            gmail = self._get_gmail()
-            
-            if history_id:
+                message_id = envelope.get("messageId")
+                if message_id:
+                    gmail = self._get_gmail()
+                    await self._fetch_and_store_gmail_message(message_id)
+            else:
+                gmail = self._get_gmail()
                 try:
                     history_response = gmail.users().history().list(userId='me', startHistoryId=history_id).execute()
                     histories = history_response.get('history', [])

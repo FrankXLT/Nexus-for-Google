@@ -22,6 +22,8 @@ Entities utilize True Brand Hex codes extracted via Google Grounding (saved in `
 ## 7.3 Backend Euclidean API Snapping
 Google Workspace APIs (specifically Gmail Labels) strictly enforce an internal palette. Sending an arbitrary brand hex causes an API failure.
 - Before the `ACTIONABLE` worker calls the Gmail API, it MUST run the entity's True Brand Hex through a **3D Euclidean Distance** mathematical function in the RGB color space.
+- The physically applied color MUST be the nearest Euclidean neighbor chosen from the predefined list of valid Gmail `textColor` and `backgroundColor` pairs. 
+- **The Zero-Dependency Math Law:** Agents are FORBIDDEN from importing heavy math/imaging libraries (like `scipy`, `numpy`, or `colormath
 - The physically applied color MUST be the nearest Euclidean neighbor chosen from the following exact predefined list of valid Gmail `textColor` and `backgroundColor` pairs. Agents are FORBIDDEN from hallucinating other combinations:
 ```json
 [

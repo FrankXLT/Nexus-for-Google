@@ -4,10 +4,13 @@
 To enforce Zero-Trust, prevent "framework thrashing" by AI coding agents, and ensure rendering performance:
 1. **The Technology Stack:** The frontend MUST be built using **Vite + React 18+ + Tailwind CSS**. React has the most mature ecosystem for DOM Virtualization (`react-virtuoso` or `react-window`), which is a mandatory structural law.
 2. **Data Visualization:** **Mermaid.js** (via React wrapper components) MUST be used for rendering the VQB Taxonomy Sankey flows and linkages.
-3. **Unified Routing (Zero CORS):** The SPA is built statically and served on the root domain (`/`) by the Caddy web server. Caddy acts as a reverse proxy, seamlessly routing all `/api/*` and `/webhook/*` calls back to the FastAPI Python server. Because the browser sees both the UI and the API on the exact same origin, CORS configurations are eliminated.
+3. **Unified Routing (Zero CORS):** 
+   - **Production:** The SPA is built statically and served by the Caddy web server, which acts as a reverse proxy, seamlessly routing `/api/*` and `/webhook/*` back to FastAPI.
+   - **Local Development:** The Vite Dev Server MUST be configured with a `proxy` in `vite.config.js` pointing `/api` and `/webhook` to `http://127.0.0.1:8000` with `changeOrigin: true`. This identically mimics production and entirely eliminates the need for CORS middleware or `SameSite` cookie gymnastics.
 4. **Authentication (Google SSO & Strict Allowlist):** The frontend relies on Google Sign-In (OpenID Connect). Passwords are forbidden.
    - **The Bouncer:** When the frontend passes the Google ID Token to the backend, FastAPI MUST cryptographically verify the token **using `GOOGLE_CLIENT_ID` as the audience** to prevent token substitution attacks. It then extracts the user's `email` and strictly checks it against the comma-separated `AUTHORIZED_EMAILS` list in `.env`.
    - **Session:** Authorized users receive an internal PyJWT token **(with a 24-hour expiration)** stored securely as an `HttpOnly`, `Secure`, `SameSite=strict` cookie.
+5. **The CI/CD Build Law:** The `node_modules` directory MUST NEVER be committed to the repository or exist permanently on the developer's local machine unless actively debugging. The `nexus.sh --deploy` script is exclusively responsible for executing `npm install` and `npm run build` directly on the VM inside the isolated release directory.
 
 ## 6.2 Rendering Performance Mandates
 The frontend is a Material Design 3 Single Page Application (SPA). To prevent browser memory crashes on massive personal datasets, agents MUST strictly adhere to:
@@ -49,7 +52,9 @@ The frontend MUST strictly adhere to a modern Material Dashboard design language
 3. **Elevation:** Strict use of soft CSS box-shadows to define Z-index elevation. Flat, border-only designs for major containers are forbidden.
 
 ### 6.6.2 SVG Icon Mapping (The Asset Vault)
-The coding agent MUST strictly use the specific SVGs provided in the `/IMAGES/` directory. External web-font libraries (e.g., FontAwesome) are strictly forbidden to ensure offline capability and asset control.
+The coding agent MUST strictly use the specific SVGs provided in the `/images/` directory by copying them into `frontend/src/assets/images/`. 
+- **The Strict Ban on External Icons:** External web-font or SVG libraries (e.g., FontAwesome, `lucide-react`, HeroIcons) are **STRICTLY FORBIDDEN** to ensure offline capability and asset control. 
+- **Implementation:** The frontend MUST utilize a generic `<Icon name="search_icon" className="..." />` React component that dynamically loads and colors the local SVG files.
 
 **Core Navigation & UI Controls:**
 - `menu.svg` & `menu-dots.svg`: Collapsing the left navigation sidebar or opening context menus.

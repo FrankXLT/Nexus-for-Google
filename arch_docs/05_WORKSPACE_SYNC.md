@@ -48,3 +48,7 @@ Upon the first successful Workspace sync, Nexus MUST natively provision a root d
   - `Nexus_System/Diagnostics/` (JSON dumps of fatal AI/API crashes)
   - `Nexus_System/Dead_Letter/` (Physical files that repeatedly crash the pipeline)
 - **The Exclusion Law:** The Drive ID of the `Nexus_System` folder MUST be appended to an internal configuration exclusion blocklist. The `RAW` and `OCR_PENDING` async workers are **STRICTLY FORBIDDEN** from ingesting, reading, OCR'ing, or categorizing any files placed inside this directory to prevent infinite recursion loops where the AI attempts to analyze its own crash logs.
+
+## 5.6 Workspace API Execution Laws
+1. **The Async Threading Law:** The official `google-api-python-client` is strictly synchronous. To prevent blocking the FastAPI asynchronous event loop, all physical Workspace API calls (e.g., `execute()`) MUST be wrapped in `asyncio.to_thread(sync_func, ...)`.
+2. **The Hierarchical Nesting Law:** Both Gmail Labels and Google Drive Folders require strict sequential parent creation. You cannot create a child node without the parent existing. The `WorkspaceMutator` MUST iteratively split nested paths (e.g., `Finance/Amazon/Receipt`) and ensure each parent level is physically created and stored in the Registry before attempting to create the child.

@@ -146,3 +146,7 @@ erDiagram
     
     WORKSPACE_ARTIFACTS ||--o| ARTIFACT_KNOWLEDGE : "comprehends"
 ```
+## 2.5 Cross-Database Queries (The ATTACH Law)
+Because routing (`nexus_core.db`) and heavy RAG indexing (`nexus_kb.db`) are split to protect event-loop performance, any UI feature that requires both (e.g., the Knowledge Graph search) MUST execute an explicit `ATTACH DATABASE` command. 
+- You MUST attach the KB database to the Core connection: `await db.execute(f"ATTACH DATABASE '{kb_db_path}' AS kb")`.
+- When querying FTS5, you MUST utilize the hidden `rank` column to sort by relevance: `ORDER BY kb_ak.rank LIMIT ? OFFSET ?`.
