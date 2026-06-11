@@ -12,6 +12,18 @@ SHARED_DIR = os.environ.get("NEXUS_SHARED_DIR", ".")
 CORE_DB_PATH = os.path.join(SHARED_DIR, "data", "nexus_core.db")
 
 def get_client() -> genai.Client:
+    """
+    Initializes and returns the Google GenAI SDK client.
+
+    Layer Interactions:
+    - Layer 4 (Cognitive AI): Manages the connection to the Gemini API.
+
+    State Interactions:
+    - None
+
+    Args/Returns:
+    - Returns: `genai.Client`
+    """
     api_key = os.environ.get("NEXUS_API_KEY")
     if not api_key:
         raise ValueError("NEXUS_API_KEY is not set in environment.")
@@ -20,7 +32,20 @@ def get_client() -> genai.Client:
 async def log_ai_audit(artifact_id: str, prompt_name: str, request_text: str, response_text: str, execution_ms: int, total_tokens: int):
     """
     Compresses request and response telemetry using zlib and stores it as SQLite BLOBs.
+
+    Layer Interactions:
+    - Layer 1 (Foundation): Logs granular AI execution details for DevSecOps.
+
+    State Interactions:
+    - None
+
+    Args/Returns:
+    - Args: Telemetry data including compressed text strings
+    - Returns: None
     """
+    # LAYER 1 INLINE: The use of zlib.compress to store payloads as SQLite BLOBs to save disk space.
+    # LLM request/response text can be enormous (up to 32k tokens). Storing them as raw TEXT 
+    # rapidly exhausts SQLite limits and disk space. We use zlib to compress them into BLOBs.
     req_blob = zlib.compress(request_text.encode('utf-8'))
     res_blob = zlib.compress(response_text.encode('utf-8'))
     current_ts = int(time.time())
@@ -34,7 +59,18 @@ async def log_ai_audit(artifact_id: str, prompt_name: str, request_text: str, re
         await db.commit()
 
 def _generate_content_sync(model_tier, full_prompt, config):
-    """Synchronous wrapper to execute genai client."""
+    """
+    Synchronous wrapper to execute genai client.
+
+    Layer Interactions:
+    - Layer 4 (Cognitive AI): Wraps the actual SDK call.
+
+    State Interactions:
+    - None
+
+    Args/Returns:
+    - Returns: The Google GenAI response object
+    """
     client = get_client()
     return client.models.generate_content(
         model=model_tier,
@@ -45,6 +81,16 @@ def _generate_content_sync(model_tier, full_prompt, config):
 async def call_llm(artifact_id: str, prompt_name: str, payload_text: str, response_model=None, use_grounding=False, custom_prompt_text=None, custom_model_tier=None):
     """
     Centralized wrapper for the google-genai SDK. Fetches prompts from the DB.
+
+    Layer Interactions:
+    - Layer 4 (Cognitive AI): Core orchestrator for all LLM inference in the system.
+
+    State Interactions:
+    - None
+
+    Args/Returns:
+    - Args: artifact_id, prompt_name, payload_text, response_model, etc.
+    - Returns: Parsed Pydantic model or raw text string
     """
     prompt_text = custom_prompt_text
     model_tier = custom_model_tier
@@ -68,7 +114,10 @@ async def call_llm(artifact_id: str, prompt_name: str, payload_text: str, respon
     if use_grounding:
         config_kwargs["tools"] = [{"google_search": {}}]
     elif response_model:
-        # Grounding cannot natively combine with response_schema in all SDK cases.
+        # LAYER 4 INLINE: How Pydantic models are passed to the response_schema configuration.
+        # We pass standard Pydantic models directly to the SDK's `response_schema` parameter 
+        # (while setting `response_mime_type` to application/json) to enforce strict JSON output 
+        # that exactly matches our expected internal taxonomy structure.
         config_kwargs["response_mime_type"] = "application/json"
         config_kwargs["response_schema"] = response_model
 
@@ -76,6 +125,10 @@ async def call_llm(artifact_id: str, prompt_name: str, payload_text: str, respon
     
     # 3. Invoke LLM asynchronously
     start_time = time.time()
+    # LAYER 4 INLINE: Why asyncio.to_thread is used to prevent the synchronous google-genai SDK from blocking the FastAPI event loop.
+    # The current Google GenAI SDK (google-genai) heavily utilizes synchronous HTTP requests. 
+    # We must offload `generate_content` to a thread pool via `asyncio.to_thread` to prevent 
+    # it from blocking the main FastAPI async event loop during long inference calls.
     response = await asyncio.to_thread(_generate_content_sync, model_tier, full_prompt, config)
     end_time = time.time()
     exec_ms = int((end_time - start_time) * 1000)

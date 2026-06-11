@@ -6,6 +6,17 @@ import StagingGrid from '../components/StagingGrid';
 import ContextModal from '../components/ContextModal';
 import useNexusStore from '../store/useNexusStore';
 
+/**
+ * Main dashboard view incorporating the Omnibox, VQB, and Staging Grid.
+ *
+ * Layer Interactions:
+ * - Layer 6 (Frontend UI)
+ *
+ * State Interactions:
+ * - Reads viewMode from NexusStore.
+ *
+ * @returns {JSX.Element}
+ */
 const Dashboard = () => {
     const { viewMode } = useNexusStore();
 

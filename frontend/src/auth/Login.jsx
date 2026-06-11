@@ -4,6 +4,17 @@ import axios from 'axios';
 import { useAuth } from './AuthProvider';
 import Icon from '../components/Icon';
 
+/**
+ * Login page using Google OAuth provider.
+ *
+ * Layer Interactions:
+ * - Layer 6 (Frontend UI)
+ *
+ * State Interactions:
+ * - Mutates AuthContext via login function.
+ *
+ * @returns {JSX.Element}
+ */
 const Login = () => {
     const { login } = useAuth();
 

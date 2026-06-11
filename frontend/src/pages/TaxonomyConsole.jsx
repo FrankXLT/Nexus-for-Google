@@ -63,6 +63,8 @@ const TaxonomyConsole = () => {
                     <div className="text-textSecondary flex items-center justify-center h-64">No linkages found in system.</div>
                 ) : (
                     <div className="flex-1 overflow-hidden pr-2">
+                        {/* LAYER 6 INLINE: The use of <Virtuoso> to enforce the DOM Virtualization Law to prevent browser memory crashes on massive datasets.
+                            We use <Virtuoso> to enforce DOM virtualization, ensuring only the visible rows are actually rendered in the DOM to avoid crashing the browser on massive linkage lists. */}
                         <Virtuoso 
                             data={linkages}
                             itemContent={renderRow}

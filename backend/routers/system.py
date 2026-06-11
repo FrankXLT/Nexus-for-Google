@@ -26,6 +26,19 @@ async def get_config(user: str = Depends(get_current_user)):
 
 @router.patch("/config")
 async def update_config(payload: Dict[str, str] = Body(...), user: str = Depends(get_current_user)):
+    """
+    Updates global system configuration variables atomically.
+
+    Layer Interactions:
+    - Layer 6 (Frontend UI): Saves user preferences from the Settings Modal.
+
+    State Interactions:
+    - None
+
+    Args/Returns:
+    - Args: Dictionary of keys and values to update
+    - Returns: JSON status
+    """
     async with aiosqlite.connect(CORE_DB_PATH) as db:
         await db.execute("BEGIN IMMEDIATE")
         for k, v in payload.items():
@@ -73,3 +86,5 @@ async def generate_theme(user: str = Depends(get_current_user)):
         return {"status": "success", "colors_applied": len(theme_data.category_colors) + len(theme_data.purpose_colors)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Theme generation failed: {str(e)}")
+tion failed: {str(e)}")
+=500, detail=f"Theme generation failed: {str(e)}")

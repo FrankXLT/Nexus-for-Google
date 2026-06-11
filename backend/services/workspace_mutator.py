@@ -51,12 +51,38 @@ GMAIL_COLORS = [
 ]
 
 def hex_to_rgb(hex_str):
+    """
+    Converts a hex color string to an RGB tuple.
+
+    Layer Interactions:
+    - Layer 7 (Chromatic Engine): Processes theme colors for external sync.
+
+    State Interactions:
+    - None
+
+    Args/Returns:
+    - Args: hex_str (str)
+    - Returns: Tuple (R, G, B)
+    """
     hex_str = hex_str.lstrip('#')
     if len(hex_str) == 6:
         return tuple(int(hex_str[i:i+2], 16) for i in (0, 2, 4))
     return (0, 0, 0)
 
 def _get_nearest_gmail_color(hex_color):
+    """
+    Maps an arbitrary hex color to the nearest strictly allowed Gmail API color palette.
+
+    Layer Interactions:
+    - Layer 5 (Workspace Sync): Prepares valid metadata for Gmail labels.
+
+    State Interactions:
+    - None
+
+    Args/Returns:
+    - Args: hex_color (str)
+    - Returns: Dictionary with textColor and backgroundColor
+    """
     if not hex_color:
         return GMAIL_COLORS[5]
     
@@ -64,6 +90,10 @@ def _get_nearest_gmail_color(hex_color):
     best_match = GMAIL_COLORS[5]
     min_dist = float('inf')
     
+    # LAYER 5 INLINE: The zero-dependency 3D Euclidean distance math (math.sqrt) to prevent Google API HTTP 400 color palette errors.
+    # Gmail's API strictly rejects any label color that isn't exactly one of its predefined 40 palette pairs (HTTP 400).
+    # To map our dynamic Chromatic Engine colors to Gmail safely, we calculate the shortest 3D distance between
+    # the target RGB vector and the allowed palette's background RGB vector.
     for color_pair in GMAIL_COLORS:
         bg_rgb = hex_to_rgb(color_pair["backgroundColor"])
         dist = math.sqrt(sum((a - b) ** 2 for a, b in zip(target_rgb, bg_rgb)))
@@ -74,6 +104,19 @@ def _get_nearest_gmail_color(hex_color):
     return best_match
 
 def _sync_create_gmail_label(gmail, name, color_hex):
+    """
+    Synchronously creates a single Gmail label node.
+
+    Layer Interactions:
+    - Layer 5 (Workspace Sync): Direct Google API mutation.
+
+    State Interactions:
+    - None
+
+    Args/Returns:
+    - Args: gmail client, name, color_hex
+    - Returns: Created Label ID
+    """
     # Fetch existing
     results = gmail.users().labels().list(userId='me').execute()
     labels = results.get('labels', [])
@@ -106,6 +149,19 @@ def _sync_create_gmail_label(gmail, name, color_hex):
         return None
 
 async def get_or_create_gmail_label(sync_mode, cat_name, alias_name, purp_name, color_hex, linkage_id):
+    """
+    Orchestrates the iterative creation of nested Gmail labels based on taxonomy rules.
+
+    Layer Interactions:
+    - Layer 5 (Workspace Sync): Modifies Gmail folder structures.
+
+    State Interactions:
+    - None
+
+    Args/Returns:
+    - Args: Taxonomy metadata strings
+    - Returns: The final leaf Label ID
+    """
     if sync_mode == 'HIDDEN':
         return None
         
@@ -115,7 +171,9 @@ async def get_or_create_gmail_label(sync_mode, cat_name, alias_name, purp_name, 
     else: # FULL
         parts = [cat_name, alias_name, purp_name]
         
-    # We must iteratively ensure each parent exists
+    # LAYER 5 INLINE: The iterative/recursive path splitting logic required because Google APIs do not auto-create parent folders.
+    # Gmail label APIs do not automatically create parent nodes (e.g., creating "Category/Entity" fails if "Category" does not exist).
+    # We must iteratively split the taxonomy path and create each node sequentially to guarantee the nested structure is built.
     gmail = get_gmail_client()
     current_path = ""
     last_label_id = None
@@ -129,10 +187,6 @@ async def get_or_create_gmail_label(sync_mode, cat_name, alias_name, purp_name, 
         # Only the final node gets the color (for simplicity) or maybe all. We'll use None for parents.
         use_color = color_hex if i == len(parts) - 1 else None
         
-        # We need to see if it's in the registry? Actually, easier to just check DB for the final one,
-        # but to be safe we'll use a sync approach with aiosqlite for the final.
-        
-        # Let's just create physically iteratively.
         last_label_id = await asyncio.to_thread(_sync_create_gmail_label, gmail, current_path, use_color)
 
     if last_label_id:
@@ -146,6 +200,19 @@ async def get_or_create_gmail_label(sync_mode, cat_name, alias_name, purp_name, 
     return last_label_id
 
 def _sync_create_drive_folder(drive, name, parent_id=None):
+    """
+    Synchronously creates a single Google Drive folder.
+
+    Layer Interactions:
+    - Layer 5 (Workspace Sync): Direct Google API mutation.
+
+    State Interactions:
+    - None
+
+    Args/Returns:
+    - Args: drive client, folder name, parent ID
+    - Returns: Created Folder ID
+    """
     query = f"name='{name}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
     if parent_id:
         query += f" and '{parent_id}' in parents"
@@ -171,6 +238,19 @@ def _sync_create_drive_folder(drive, name, parent_id=None):
         return None
 
 async def get_or_create_drive_folder(sync_mode, cat_name, alias_name, purp_name, color_hex, linkage_id):
+    """
+    Orchestrates the iterative creation of nested Drive folders based on taxonomy rules.
+
+    Layer Interactions:
+    - Layer 5 (Workspace Sync): Modifies Google Drive directory structures.
+
+    State Interactions:
+    - None
+
+    Args/Returns:
+    - Args: Taxonomy metadata strings
+    - Returns: The final leaf Folder ID
+    """
     if sync_mode == 'HIDDEN':
         return None
         

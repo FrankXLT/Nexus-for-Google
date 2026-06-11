@@ -14,6 +14,17 @@ const ProtectedRoute = ({ children }) => {
     return children;
 };
 
+/**
+ * Main application routing and protection layer.
+ *
+ * Layer Interactions:
+ * - Layer 6 (Frontend UI)
+ *
+ * State Interactions:
+ * - None
+ *
+ * @returns {JSX.Element}
+ */
 const App = () => {
     return (
         <ThemeProvider>
@@ -32,6 +43,13 @@ const App = () => {
                             </ProtectedRoute>
                         } />
                     </Routes>
+                </Router>
+            </AuthProvider>
+        </ThemeProvider>
+    );
+};
+
+export default App;                 </Routes>
                 </Router>
             </AuthProvider>
         </ThemeProvider>

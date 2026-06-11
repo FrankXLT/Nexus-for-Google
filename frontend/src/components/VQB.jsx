@@ -2,6 +2,17 @@ import React from 'react';
 import useNexusStore from '../store/useNexusStore';
 import VQBSankey from './VQBSankey';
 
+/**
+ * Visual Query Builder (VQB) wrapper component displaying activity heatmaps and Sankey flows.
+ *
+ * Layer Interactions:
+ * - Layer 6 (Frontend UI)
+ *
+ * State Interactions:
+ * - Reads artifacts and isLoading from NexusStore.
+ *
+ * @returns {JSX.Element}
+ */
 const VQB = () => {
     const { artifacts, isLoading } = useNexusStore();
 

@@ -28,6 +28,10 @@ async def get_linkages(limit: int = 500, offset: int = 0, user: str = Depends(ge
 async def approve_linkage(linkage_id: str, user: str = Depends(get_current_user)):
     async with aiosqlite.connect(CORE_DB_PATH, timeout=20.0) as db:
         try:
+            # LAYER 3 INLINE: Why PATCH /approve uses a BEGIN IMMEDIATE transaction.
+            # We must use BEGIN IMMEDIATE to ensure the transition of the linkage state (to ACTIVE)
+            # and the release of all parked WORKSPACE_ARTIFACTS (QUARANTINE -> ACTIONABLE) occur atomically.
+            # This prevents race conditions where the ActionableWorker might pick up artifacts before the linkage is fully active.
             await db.execute("BEGIN IMMEDIATE")
             
             # 1. Update linkage to active
@@ -47,3 +51,4 @@ async def approve_linkage(linkage_id: str, user: str = Depends(get_current_user)
         except Exception as e:
             await db.rollback()
             raise HTTPException(status_code=500, detail=str(e))
+e))

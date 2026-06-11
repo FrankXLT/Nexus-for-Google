@@ -3,6 +3,17 @@ import { Virtuoso } from 'react-virtuoso';
 import useNexusStore from '../store/useNexusStore';
 import Icon from './Icon';
 
+/**
+ * Displays actionable and quarantined artifacts in a virtualized list.
+ *
+ * Layer Interactions:
+ * - Layer 6 (Frontend UI)
+ *
+ * State Interactions:
+ * - Reads artifacts, isLoading from NexusStore; mutates selectedArtifact.
+ *
+ * @returns {JSX.Element}
+ */
 const StagingGrid = () => {
     const { artifacts, fetchData, setSelectedArtifact, isLoading } = useNexusStore();
 
@@ -48,6 +59,12 @@ const StagingGrid = () => {
                 />
             ) : (
                 <div className="text-textSecondary text-center mt-10">No actionable artifacts found.</div>
+            )}
+        </div>
+    );
+};
+
+export default StagingGrid;text-center mt-10">No actionable artifacts found.</div>
             )}
         </div>
     );

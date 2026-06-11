@@ -2,6 +2,19 @@ import os
 from google_auth_oauthlib.flow import InstalledAppFlow
 
 def authenticate_workspace():
+    """
+    Initiates a local OAuth 2.0 flow to generate the `token.json` for backend workers.
+
+    Layer Interactions:
+    - Layer 1 (Foundation): Establishes the core API permissions.
+    - Layer 5 (Workspace Sync): Grants offline access to Gmail and Drive scopes.
+
+    State Interactions:
+    - None
+
+    Args/Returns:
+    - None
+    """
     shared_dir = os.environ.get("NEXUS_SHARED_DIR", ".")
     credentials_path = os.path.join(shared_dir, "credentials.json")
     token_path = os.path.join(shared_dir, "token.json")

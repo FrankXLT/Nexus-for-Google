@@ -74,6 +74,10 @@ const ContextModal = () => {
                     )}
                     
                     {activeTab === 'AI_TRACE' && (
+                        // LAYER 6 INLINE: The AI Trace tab provides Tier 1 UI Decision Tracing to eliminate the "black box" effect of the LLM.
+                        // By showing the exact JSON inputs and outputs of the LLM execution in the AI Trace tab, 
+                        // we provide Tier 1 Decision Tracing, completely eliminating the "black box" effect of AI models 
+                        // and allowing users to audit the exact reasoning for any automated taxonomy assignment.
                         <div>
                             {logsLoading ? (
                                 <div className="text-textSecondary text-center mt-10">Decrypting telemetry...</div>

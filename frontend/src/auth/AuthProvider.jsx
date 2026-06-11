@@ -5,6 +5,18 @@ const AuthContext = createContext();
 
 export const useAuth = () => useContext(AuthContext);
 
+/**
+ * Context provider managing global authentication state.
+ *
+ * Layer Interactions:
+ * - Layer 6 (Frontend UI)
+ *
+ * State Interactions:
+ * - Mutates and reads local isAuthenticated and isLoading states.
+ *
+ * @param {Object} props - Child components
+ * @returns {JSX.Element}
+ */
 export const AuthProvider = ({ children }) => {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [isLoading, setIsLoading] = useState(true);

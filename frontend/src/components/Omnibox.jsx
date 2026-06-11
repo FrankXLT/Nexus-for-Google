@@ -7,6 +7,10 @@ const Omnibox = () => {
     const [inputValue, setInputValue] = useState('');
 
     useEffect(() => {
+        // LAYER 6 INLINE: The Debounce Law—why the setTimeout and cleanup function are used to wait 300ms before dispatching setSearchQuery to protect the backend from API spam.
+        // Typing in the Omnibox fires keystrokes rapidly. We use a 300ms setTimeout debounce
+        // to prevent spamming the backend API on every keystroke. The cleanup function clears the timer
+        // if another keystroke occurs before the 300ms elapses.
         const timer = setTimeout(() => {
             setSearchQuery(inputValue);
         }, 300);

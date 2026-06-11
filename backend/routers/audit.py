@@ -24,6 +24,10 @@ async def get_audit_logs(artifact_id: str, user: str = Depends(get_current_user)
             log_entry = dict(row)
             
             # Decompress request
+            # LAYER 6 INLINE: The zlib.decompress safety blocks preventing UI crashes on corrupted telemetry.
+            # Telemetry payloads are stored compressed to save space. We wrap decompression in a try/except block 
+            # so that if a BLOB is corrupted, the UI gracefully falls back to displaying the error string 
+            # rather than crashing the entire artifact inspection view.
             try:
                 req_blob = log_entry.get('request_payload_compressed')
                 if req_blob:

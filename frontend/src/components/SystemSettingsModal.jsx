@@ -2,6 +2,18 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import Icon from './Icon';
 
+/**
+ * Modal for global system configurations and theme generation.
+ *
+ * Layer Interactions:
+ * - Layer 6 (Frontend UI)
+ *
+ * State Interactions:
+ * - Mutates local config, loading, and generating states.
+ *
+ * @param {Object} props - Contains onClose handler.
+ * @returns {JSX.Element|null}
+ */
 const SystemSettingsModal = ({ onClose }) => {
     const [config, setConfig] = useState({});
     const [loading, setLoading] = useState(true);
@@ -106,4 +118,4 @@ const SystemSettingsModal = ({ onClose }) => {
     );
 };
 
-export default SystemSettingsModal;
+export default SystemSettingsModal;ult SystemSettingsModal;

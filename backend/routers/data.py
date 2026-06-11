@@ -36,6 +36,19 @@ async def get_artifacts(
     state: Optional[str] = None,
     user: str = Depends(get_current_user)
 ):
+    """
+    Retrieves paginated workspace artifacts with joined taxonomy linkages.
+
+    Layer Interactions:
+    - Layer 6 (Frontend UI): Powers the Staging Grid with server-side pagination.
+
+    State Interactions:
+    - None
+
+    Args/Returns:
+    - Args: limit, offset, optional state filter
+    - Returns: List of artifact dictionary records
+    """
     query = """
         SELECT wa.id, wa.state, wa.source_system, wa.source_sender, wa.priority, 
                wa.nexus_important, wa.ui_summary, wa.created_at_ts,

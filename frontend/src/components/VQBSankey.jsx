@@ -6,6 +6,10 @@ const VQBSankey = () => {
     const { artifacts } = useNexusStore();
 
     const option = useMemo(() => {
+        // LAYER 6 INLINE: Maps the flat artifacts array into the exact nodes and links format expected by Apache ECharts. Why ECharts is used instead of Mermaid.js (React 18 Strict Mode lifecycle conflicts).
+        // Apache ECharts expects a specific {nodes, links} object. We reduce the flat artifacts array 
+        // to aggregate the linkage weights. We utilize ECharts instead of Mermaid.js because Mermaid.js 
+        // struggles with React 18's Strict Mode double-render lifecycles, causing overlapping DOM injections.
         const nodesMap = new Map();
         const linksMap = new Map();
 

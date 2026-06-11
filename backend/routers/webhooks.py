@@ -10,6 +10,20 @@ router = APIRouter()
 
 @router.post("/webhook/gmail")
 async def gmail_webhook(request: Request, response: Response):
+    """
+    Receives push notifications from Google Cloud Pub/Sub for Gmail events.
+
+    Layer Interactions:
+    - Layer 1 (Foundation): Ingress endpoint for Google's webhook payloads.
+    - Layer 3 (State Machine): Inserts the initial SUB state trigger.
+
+    State Interactions:
+    - Creates SUB state
+
+    Args/Returns:
+    - Args: FastAPI Request and Response objects
+    - Returns: JSON status HTTP 202
+    """
     try:
         request_body = await request.json()
     except Exception:

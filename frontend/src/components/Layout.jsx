@@ -3,6 +3,18 @@ import { useNavigate } from 'react-router-dom';
 import Icon from './Icon';
 import SystemSettingsModal from './SystemSettingsModal';
 
+/**
+ * Core application layout structure with sidebar navigation.
+ *
+ * Layer Interactions:
+ * - Layer 6 (Frontend UI)
+ *
+ * State Interactions:
+ * - Mutates local isSettingsOpen state.
+ *
+ * @param {Object} props - Child components to render in main area.
+ * @returns {JSX.Element}
+ */
 const Layout = ({ children }) => {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const navigate = useNavigate();
