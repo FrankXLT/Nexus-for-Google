@@ -164,6 +164,18 @@ async def init_kb_db():
         await db.commit()
 
 async def seed_database():
+    """
+    Populates the initial database with default taxonomy, configuration, and system parameters.
+
+    Layer Interactions:
+    - Layer 2 (Data Ontology): Seeds `nexus_core.db` using JSON defaults.
+
+    State Interactions:
+    - None
+
+    Args/Returns:
+    - None
+    """
     if not DEFAULTS_PATH.exists():
         print(f"Warning: Defaults file {DEFAULTS_PATH} not found. Skipping seed.")
         return
@@ -206,4 +218,5 @@ async def main():
     await seed_database()
 
 if __name__ == "__main__":
+    asyncio.run(main())ame__ == "__main__":
     asyncio.run(main())

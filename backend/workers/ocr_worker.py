@@ -19,6 +19,18 @@ os.makedirs(TMP_DIR, exist_ok=True)
 os.makedirs(LOGS_DIR, exist_ok=True)
 
 class OcrWorker:
+    """
+    Processes files requiring Optical Character Recognition or direct text extraction.
+
+    Layer Interactions:
+    - Layer 4 (Cognitive AI): Interacts with PyMuPDF and GCP Document AI.
+
+    State Interactions:
+    - Claims: OCR_PENDING -> Transitions: TRIAGE or ERROR
+
+    Args/Returns:
+    - None
+    """
     def __init__(self):
         self.drive = None
         self.docai_client = None

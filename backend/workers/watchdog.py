@@ -8,6 +8,18 @@ import aiosqlite
 logger = logging.getLogger(__name__)
 
 class WatchdogWorker(BaseWorker):
+    """
+    System maintenance loop for webhook renewals, zombie reclamation, and telemetry pruning.
+
+    Layer Interactions:
+    - Layer 1 (Foundation): Executes base system cleanups and log rotations.
+
+    State Interactions:
+    - Mutates locked_at_ts for stuck items and deletes old AI_AUDIT_LOGS.
+
+    Args/Returns:
+    - None
+    """
     def __init__(self):
         super().__init__("WatchdogWorker")
         self.shared_dir = os.environ.get("NEXUS_SHARED_DIR", ".")

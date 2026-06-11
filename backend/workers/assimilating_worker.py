@@ -144,6 +144,10 @@ class AssimilatingWorker:
 
         # 4. Drive Metadata Sovereignty
         if source_system == 'drive':
+            # LAYER 5 INLINE: The 124-byte properties vs 32,000-byte description injection in assimilating_worker.py.
+            # Layer 5 dictates that strict structured taxonomy variables (canonical_name, etc.) 
+            # map to Drive's 124-byte limit custom properties. Large unstructured extractions 
+            # (facts, summary) map to the 32,000-byte description field.
             props = {
                 "canonical_name": canonical_name[:124],
                 "workspace_alias": alias_string[:124],
@@ -171,4 +175,5 @@ class AssimilatingWorker:
     async def _mark_error(self, artifact_id, msg):
         async with aiosqlite.connect(CORE_DB_PATH, timeout=20.0) as db:
             await db.execute("UPDATE WORKSPACE_ARTIFACTS SET state = 'ERROR', locked_at_ts = NULL WHERE id = ?", (artifact_id,))
+            await db.commit()?", (artifact_id,))
             await db.commit()

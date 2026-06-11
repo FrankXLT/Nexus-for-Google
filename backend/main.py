@@ -16,7 +16,16 @@ from backend.workers.sweeper_worker import SweeperWorker
 async def lifespan(app: FastAPI):
     """
     Lifespan context manager for FastAPI.
-    Initializes and cleans up the Asynchronous Closed-Loop Fusion Engine workers (Layer 3).
+
+    Layer Interactions:
+    - Layer 3 (State Machine): Initializes and cleans up the Asynchronous Closed-Loop Fusion Engine workers.
+
+    State Interactions:
+    - None
+
+    Args/Returns:
+    - Args: app (FastAPI)
+    - Returns: None
     """
     print("Starting background fusion workers...")
     
@@ -80,7 +89,14 @@ app.include_router(system.router)
 async def health_check():
     """
     Basic health check endpoint for the Ingress Layer.
+
+    Layer Interactions:
+    - Layer 1 (Foundation): Allows Caddy/Systemd to verify backend uptime.
+
+    State Interactions:
+    - None
+
+    Args/Returns:
+    - Returns: JSON dict with status
     """
-    return {"status": "ok", "layer": "ingress"}
-"""
     return {"status": "ok", "layer": "ingress"}

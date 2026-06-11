@@ -16,6 +16,18 @@ class PurposeSelectionSchema(BaseModel):
     selected_purpose_name: str
 
 class TriageWorker:
+    """
+    Evaluates raw artifacts against existing known entities and purposes to route them.
+
+    Layer Interactions:
+    - Layer 4 (Cognitive AI): Uses micro-LLM prompts to route based on context.
+
+    State Interactions:
+    - Claims: TRIAGE -> Transitions: ACTIONABLE, EVALUATING, or keeps lock
+
+    Args/Returns:
+    - None
+    """
     async def run(self):
         print("TriageWorker started.")
         while True:

@@ -203,6 +203,19 @@ EOF
     sudo systemctl enable nexus.service
     sudo systemctl restart nexus.service
 
+    # 8. Log Rotation
+    log "Configuring Logrotate..."
+    cat <<EOF | sudo tee /etc/logrotate.d/nexus
+${SHARED_DIR}/logs/*.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+}
+EOF
+
     log "Deployment Complete. $RELEASE_TAG is now live."
 }
 

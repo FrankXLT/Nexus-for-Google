@@ -75,3 +75,6 @@ You are an expert Enterprise Software Architect working on Nexus V3. You MUST st
 - **Sender Locking:** When processing `TRIAGE`, you MUST enforce Sender Locking (Layer 3, Sec 3.3.3). Never allow multiple artifacts from the same unknown sender into the `EVALUATING` LLM queue simultaneously. This protects the API budget.
 - **Workspace Batching:** When mutating Google Workspace for historical `priority=3` items, the `ACTIONABLE` worker MUST use Google API Batch Requests (e.g., `batchModify`) and Exponential Backoff to prevent `HTTP 429` quota bans.
 - **Sweeper Reference:** You may reference `backend/sweeper_engine.py` from the Dead Repo for Workspace API pagination logic, but it must be refactored to simply INSERT artifacts into the local database as `RAW/priority=3` with `context_hint`s.
+
+### 14. The Versioning Law
+- All future modifications MUST adhere to Semantic Versioning. Any feature addition or bug fix MUST be documented in `CHANGELOG.md` under the [Unreleased] section.

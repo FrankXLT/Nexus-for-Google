@@ -21,5 +21,17 @@ class BaseWorker:
                 await asyncio.sleep(10)
 
     async def process(self):
-        """To be implemented by subclasses. Should contain the core logic for one iteration of the loop."""
+        """
+        Abstract method to process one loop iteration. Must be overridden by subclasses.
+
+        Layer Interactions:
+        - Layer 3 (State Machine): Subclass logic for state transitions.
+
+        State Interactions:
+        - None
+
+        Args/Returns:
+        - None
+        """
         raise NotImplementedError("Subclasses must implement process()")
+entedError("Subclasses must implement process()")

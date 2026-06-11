@@ -151,6 +151,9 @@ class RawWorker:
                 break
 
         # Thread Inheritance check FIRST
+        # LAYER 3 INLINE: The Thread Inheritance (thread_id) checks and Quoted Reply stripping in raw_worker.py.
+        # New emails in an existing thread MUST inherit the linkage classification of the parent 
+        # to prevent fragmented ontological assignments and bypass the TRIAGE/EVALUATING queues.
         is_inherited = False
         mapped_linkage_id = None
         state = 'TRIAGE'
@@ -292,4 +295,5 @@ class RawWorker:
     async def _mark_error(self, artifact_id):
         async with aiosqlite.connect(CORE_DB_PATH, timeout=20.0) as db:
             await db.execute("UPDATE WORKSPACE_ARTIFACTS SET state = 'ERROR', locked_at_ts = NULL WHERE id = ?", (artifact_id,))
+            await db.commit()
             await db.commit()

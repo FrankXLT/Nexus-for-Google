@@ -19,6 +19,18 @@ class EvaluationSchema(BaseModel):
     nexus_important: bool
 
 class EvaluatingWorker:
+    """
+    Analyzes novel artifacts to map them to categories, entities, and purposes dynamically.
+
+    Layer Interactions:
+    - Layer 4 (Cognitive AI): Connects to Tier 1 LLM for deep taxonomy grounding.
+
+    State Interactions:
+    - Claims: EVALUATING -> Transitions: QUARANTINE or ERROR
+
+    Args/Returns:
+    - None
+    """
     async def run(self):
         print("EvaluatingWorker started.")
         while True:

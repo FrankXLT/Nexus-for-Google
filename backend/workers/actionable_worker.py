@@ -9,6 +9,18 @@ SHARED_DIR = os.environ.get("NEXUS_SHARED_DIR", ".")
 CORE_DB_PATH = os.path.join(SHARED_DIR, "data", "nexus_core.db")
 
 class ActionableWorker:
+    """
+    Executes physical mutations against Google Workspace APIs (Labels, Folders) based on routing decisions.
+
+    Layer Interactions:
+    - Layer 5 (Workspace Sync): Interacts directly with Drive and Gmail APIs to apply taxonomy states.
+
+    State Interactions:
+    - Claims: ACTIONABLE -> Transitions: ASSIMILATING or ERROR
+
+    Args/Returns:
+    - None
+    """
     async def run(self):
         print("ActionableWorker started.")
         while True:
@@ -231,4 +243,6 @@ class ActionableWorker:
     async def _mark_error(self, artifact_id, msg):
         async with aiosqlite.connect(CORE_DB_PATH, timeout=20.0) as db:
             await db.execute("UPDATE WORKSPACE_ARTIFACTS SET state = 'ERROR', locked_at_ts = NULL WHERE id = ?", (artifact_id,))
+            await db.commit()
+
             await db.commit()

@@ -28,6 +28,10 @@ class SweeperWorker:
         while self.is_running:
             try:
                 # Check backpressure
+                # LAYER 3 INLINE: The Active Backlog Backpressure checks in sweeper_worker.py.
+                # Priority constraints mandate that we halt historical ingestion if the active core 
+                # processing queue exceeds 250 items. This ensures Live webhooks (Priority 1) are not 
+                # drowned out by legacy sweeps (Priority 3) and prevents DB memory exhaustion.
                 async with aiosqlite.connect(CORE_DB_PATH, timeout=20.0) as db:
                     cursor = await db.execute("SELECT COUNT(*) FROM WORKSPACE_ARTIFACTS WHERE state IN ('RAW', 'TRIAGE', 'EVALUATING')")
                     row = await cursor.fetchone()
