@@ -32,7 +32,7 @@ const Login = () => {
             <div className="p-8 bg-bgSurface rounded-xl shadow-lg flex flex-col items-center">
                 <Icon name="google-gemini-logo" className="w-16 h-16 mb-4" />
                 <h1 className="text-2xl font-bold text-textPrimary mb-6">Nexus Login</h1>
-                <GoogleOAuthProvider clientId="REPLACE_WITH_YOUR_CLIENT_ID">
+                <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID}>
                     <GoogleLogin
                         onSuccess={onSuccess}
                         onError={() => console.log('Login Failed')}

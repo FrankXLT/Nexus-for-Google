@@ -66,14 +66,26 @@ provision() {
     fi
 
     echo -e "\n${CYAN}[4/6] Injecting Environment Secrets...${NC}"
+    
+    # Prompt for credentials.json early so we can parse the Client ID
+    read -p "Enter local path to your credentials.json file: " CREDS_PATH
+    if [ -n "$CREDS_PATH" ] && [ -f "$CREDS_PATH" ]; then
+        GOOGLE_CLIENT_ID=$(grep -o '"client_id":"[^"]*"' "$CREDS_PATH" | head -n 1 | cut -d'"' -f4)
+        echo -e "${GREEN}Auto-extracted Google Client ID: $GOOGLE_CLIENT_ID${NC}"
+    else
+        echo -e "${RED}Error: credentials.json is required.${NC}"
+        exit 1
+    fi
+
+    DOCAI_PROJECT_ID=$PROJECT_ID
+    echo -e "${GREEN}Auto-mapped DocAI Project ID: $PROJECT_ID${NC}"
+
     read -p "NEXUS_HMAC_SECRET (Random 64-char string): " NEXUS_HMAC_SECRET
     read -p "NEXUS_API_KEY (Gemini): " NEXUS_API_KEY
     read -p "NEXUS_PUBLIC_DOMAIN (e.g., nexus.yourdomain.com): " NEXUS_PUBLIC_DOMAIN
     echo -e "${YELLOW}(Optional) To automatically fetch SSL certs behind the Cloudflare Proxy (Orange Cloud), provide a DNS API Token.${NC}"
     read -p "CLOUDFLARE_API_TOKEN (Leave blank if not using CF proxy): " CLOUDFLARE_API_TOKEN
     read -p "AUTHORIZED_EMAILS (comma separated): " AUTHORIZED_EMAILS
-    read -p "GOOGLE_CLIENT_ID: " GOOGLE_CLIENT_ID
-    read -p "DOCAI_PROJECT_ID: " DOCAI_PROJECT_ID
     read -p "DOCAI_PROCESSOR_ID: " DOCAI_PROCESSOR_ID
 
     cat > .nexus_env <<EOF
@@ -111,7 +123,7 @@ mkswap /swapfile
 swapon /swapfile
 echo "/swapfile none swap sw 0 0" >> /etc/fstab
 
-mkdir -p /opt/nexus/shared/data /opt/nexus/shared/logs /opt/nexus/shared/tmp /opt/nexus/releases
+mkdir -p /opt/nexus/shared/data /opt/nexus/shared/logs /opt/nexus/shared/tmp /opt/nexus/releases /opt/nexus/shared/backups
 chown -R '"$USER:$USER"' /opt/nexus
 '
     
@@ -132,12 +144,8 @@ DOCAI_PROCESSOR_ID='$DOCAI_PROCESSOR_ID'
 EOF
     "
 
-    read -p "Enter path to your credentials.json file (leave blank to skip): " CREDS_PATH
-    if [ -n "$CREDS_PATH" ] && [ -f "$CREDS_PATH" ]; then
-        gcloud compute scp "$CREDS_PATH" "$INSTANCE_NAME:/opt/nexus/shared/credentials.json" --zone="$ZONE"
-    else
-        echo -e "${YELLOW}Skipped credentials.json. Please upload it to /opt/nexus/shared/ manually later.${NC}"
-    fi
+    # Push credentials securely to the server
+    gcloud compute scp "$CREDS_PATH" "$INSTANCE_NAME:/opt/nexus/shared/credentials.json" --zone="$ZONE"
 
     echo -e "\n${CYAN}[6/6] Provisioning Pub/Sub...${NC}"
     gcloud pubsub topics create nexus-incoming-topic --project="$PROJECT_ID" || true
@@ -163,19 +171,62 @@ deploy() {
     load_env
     echo -e "\n${CYAN}Starting Zero-Downtime Deployment to $TARGET_VM...${NC}"
     
-    echo "1. Packaging local repository (excluding node_modules/ignored files)..."
+    echo -e "\n${YELLOW}--- 1. Branch Selection ---${NC}"
+    echo "Fetching git branches..."
+    git fetch origin || true
+    
+    # Safely fetch remote branches into an array
+    IFS=$'\n' read -r -d '' -a branches < <( git branch -r | grep "origin/" | grep -v "HEAD" | sed 's/^[ \t]*origin\///' && printf '\0' )
+    if [ ${#branches[@]} -eq 0 ]; then
+        echo -e "${YELLOW}No remote branches found. Proceeding with current local state.${NC}"
+    else
+        for i in "${!branches[@]}"; do
+            echo "[$i] ${branches[$i]}"
+        done
+        echo ""
+        read -p "Select branch number (or press Enter to deploy current local state without switching): " bIdx
+        if [ -n "$bIdx" ]; then
+            SELECTED_BRANCH="${branches[$bIdx]}"
+            echo -e "${GREEN}Switching to branch: $SELECTED_BRANCH${NC}"
+            git checkout "$SELECTED_BRANCH"
+            git pull origin "$SELECTED_BRANCH"
+        else
+            echo -e "${YELLOW}Deploying current local workspace state.${NC}"
+        fi
+    fi
+    
+    echo -e "\n${YELLOW}--- 2. Database Backup ---${NC}"
+    read -p "Backup remote SQLite databases before deploying? (Y/n): " doBackup
+    if [[ ! "$doBackup" =~ ^[Nn]$ ]]; then
+        echo "Creating backup on remote server..."
+        gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --command="
+            mkdir -p /opt/nexus/shared/backups
+            TIMESTAMP=\$(date +%Y%m%d_%H%M%S)
+            cp /opt/nexus/shared/data/*.db /opt/nexus/shared/backups/ 2>/dev/null || echo 'No databases found to backup yet.'
+            echo 'Databases backed up to /opt/nexus/shared/backups/'
+        "
+    fi
+
+    echo -e "\n${YELLOW}--- 3. Packaging & Uploading ---${NC}"
+    echo "Packaging local repository (excluding node_modules/ignored files)..."
     tar -czf /tmp/nexus_release.tar.gz --exclude='.git' --exclude='node_modules' --exclude='frontend/node_modules' --exclude='.env' --exclude='credentials.json' --exclude='token.json' --exclude='AUDITS' .
     
-    echo "2. Pushing package to VM..."
+    echo "Pushing package to VM..."
     gcloud compute scp /tmp/nexus_release.tar.gz "$TARGET_VM:/tmp/nexus_release.tar.gz" --zone="$TARGET_ZONE"
     
-    echo "3. Executing remote build process..."
+    echo -e "\n${YELLOW}--- 4. Remote Build & Hot-Swap ---${NC}"
+    echo "Executing remote build process..."
     gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --command="
         set -e
         RELEASE_DIR=/opt/nexus/releases/\$(date +%Y%m%d_%H%M%S)
         mkdir -p \$RELEASE_DIR
         tar -xzf /tmp/nexus_release.tar.gz -C \$RELEASE_DIR
         
+        source /opt/nexus/shared/.env
+        
+        echo '-> Injecting Google Client ID into React Frontend...'
+        echo \"VITE_GOOGLE_CLIENT_ID=\$GOOGLE_CLIENT_ID\" > \$RELEASE_DIR/frontend/.env
+
         echo '-> Building Frontend SPA (Remote Build Law)'
         cd \$RELEASE_DIR/frontend
         npm install
