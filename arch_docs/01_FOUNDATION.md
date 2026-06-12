@@ -5,8 +5,14 @@ Nexus V3 is an **Asynchronous Closed-Loop Fusion Engine**. It securely bridges e
 - **Asynchronous Decoupling:** No webhook or ingress point waits for LLM completion. Everything is dropped into a Blackboard Database, and FastAPI `BackgroundTasks` process state transitions asynchronously.
 - **Data Sovereignty:** Nexus relies on its databases for high-speed UI operations, but true knowledge is continuously injected natively back into Google Drive file properties. If Nexus is destroyed, the user's files retain their taxonomic identity.
 
-## 1.2 Unified DevOps: The `nexus.sh` Shell
-All deployment, maintenance, diagnostics, and tunneling are controlled via a single Bash script at the project root (`nexus.sh`). The coding agent MUST reference the Dead Repo (`Nexus-for-Google-DeadRepo/scripts/`) for legacy Bash/PowerShell syntax, but refactor it into this unified, idempotent script.
+## 1.2 Unified DevOps: The Local `nexus.sh` Orchestrator
+All deployment, maintenance, diagnostics, and tunneling are controlled via a single Bash script (`nexus.sh`) designed to run **LOCALLY** on the developer's workstation. It uses the `gcloud` SDK to treat the remote GCP VM as a fully automated target.
+
+**Modes of Operation:**
+1. **Provision Infrastructure:** Runs `gcloud compute instances create` to spawn an `e2-micro` VM. Injects a startup script that installs dependencies (Python, Node, Caddy), configures the `ufw` firewall, and generates a critical 2GB swap space. It prompts locally for `.env` secrets and pushes them securely to the VM's `/opt/nexus/shared/` directory. It also automatically provisions the GCP Pub/Sub triggers.
+2. **Deploy Application:** Adhering to the **Remote Build Law**, it bundles the local codebase into a `.tar.gz`, uploads it via `gcloud compute scp`, and extracts it on the VM. It executes `npm install` and `npm run build` natively on the server, initializes the Python `venv` and database, configures the Caddy SSL proxy, and updates the `/opt/nexus/current` symlink and `systemd` daemon for zero-downtime.
+3. **Authenticate Workspace:** Opens an SSH tunnel (`8080:127.0.0.1:8080`) to the VM. Temporarily suspends the background daemon, runs `workspace_auth.py` locally through the tunnel, captures the `token.json`, and resumes the daemon.
+4. **Health Check & Control Panel:** Fetches remote `systemctl` statuses, API health checks, and database metrics to provide a local dashboard interface, allowing you to quickly tail logs or prune old releases.
 
 **Modes of Operation:**
 1. **Interactive UI:** Running `./nexus.sh` without arguments launches a color-coded terminal GUI menu.

@@ -1,212 +1,215 @@
 #!/bin/bash
+# nexus.sh - Local Workstation DevSecOps CLI for Nexus V3
+
 set -e
+set -o pipefail
+export CLOUDSDK_COMPUTE_USE_OPENSSH=1
 
-# Nexus V3 DevOps Shell
-
-NEXUS_ROOT="/opt/nexus"
-SHARED_DIR="$NEXUS_ROOT/shared"
-CURRENT_DIR="$NEXUS_ROOT/current"
-RELEASES_DIR="$NEXUS_ROOT/releases"
-ENV_FILE="$SHARED_DIR/.env"
-
-RED='\033[0;31m'
+# Color Codes
 GREEN='\033[0;32m'
+CYAN='\033[0;36m'
 YELLOW='\033[1;33m'
+RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-log() { echo -e "${GREEN}[NEXUS]${NC} $1"; }
-warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
-error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
+echo -e "${CYAN}====================================================${NC}"
+echo -e "${CYAN}      NEXUS V3: MASTER CONTROL & DEPLOYMENT         ${NC}"
+echo -e "${CYAN}====================================================${NC}"
 
-setup_env() {
-    if [ ! -f "$ENV_FILE" ]; then
-        log "Initializing $ENV_FILE..."
-        mkdir -p "$SHARED_DIR"
-        read -p "Enter NEXUS_HMAC_SECRET: " hmac_secret
-        read -p "Enter NEXUS_API_KEY (Gemini): " api_key
-        read -p "Enter NEXUS_PUBLIC_DOMAIN (e.g., nexus.mydomain.com): " public_domain
-        read -p "Enter AUTHORIZED_EMAILS (comma separated): " auth_emails
-        read -p "Enter GOOGLE_CLIENT_ID: " google_client_id
-        read -p "Enter DOCAI_PROJECT_ID: " docai_project_id
-        read -p "Enter DOCAI_LOCATION (default 'us'): " docai_location
-        docai_location=${docai_location:-us}
-        read -p "Enter DOCAI_PROCESSOR_ID: " docai_processor_id
-        
-        cat <<EOF > "$ENV_FILE"
-NEXUS_HMAC_SECRET="$hmac_secret"
-NEXUS_API_KEY="$api_key"
-NEXUS_PUBLIC_DOMAIN="$public_domain"
-AUTHORIZED_EMAILS="$auth_emails"
-GOOGLE_CLIENT_ID="$google_client_id"
-DOCAI_PROJECT_ID="$docai_project_id"
-DOCAI_LOCATION="$docai_location"
-DOCAI_PROCESSOR_ID="$docai_processor_id"
-EOF
-        log ".env file created securely."
-    else
-        log ".env file already exists."
+# Ensure gcloud is installed
+if ! command -v gcloud &> /dev/null; then
+    echo -e "${RED}Error: Google Cloud CLI (gcloud) is not installed.${NC}"
+    exit 1
+fi
+
+load_env() {
+    if [ ! -f ".nexus_env" ]; then
+        echo -e "${RED}Error: .nexus_env file not found. Run Option 1 (Provision) first.${NC}"
+        exit 1
     fi
-    source "$ENV_FILE"
+    TARGET_VM=$(grep "^TARGET_VM=" .nexus_env | cut -d'=' -f2 | tr -d '\r')
+    TARGET_ZONE=$(grep "^TARGET_ZONE=" .nexus_env | cut -d'=' -f2 | tr -d '\r')
+    PROJECT_ID=$(grep "^PROJECT_ID=" .nexus_env | cut -d'=' -f2 | tr -d '\r')
+    NEXUS_PUBLIC_DOMAIN=$(grep "^NEXUS_PUBLIC_DOMAIN=" .nexus_env | cut -d'=' -f2 | tr -d '\r')
 }
 
 provision() {
-    log "Starting Provisioning Process..."
-    
-    # 1. GCP Authentication Check
-    if ! gcloud auth print-access-token &> /dev/null; then
-        error "gcloud is not authenticated. Please run 'gcloud auth login' first."
+    echo -e "\n${CYAN}[1/6] Authentication & Project Setup...${NC}"
+    ACTIVE_ACCOUNT=$(gcloud auth list --filter=status:ACTIVE --format="value(account)")
+    if [ -z "$ACTIVE_ACCOUNT" ]; then
+        gcloud auth login
     fi
 
-    # 2. Setup Env
-    setup_env
+    IFS=$'\n' read -r -d '' -a projects < <( gcloud projects list --format="value(projectId,name)" && printf '\0' )
+    for i in "${!projects[@]}"; do echo "[$i] ${projects[$i]}"; done
+    read -p "Select Project number: " projIdx
+    PROJECT_ID=$(echo "${projects[$projIdx]}" | awk '{print $1}')
+    gcloud config set project "$PROJECT_ID" --quiet
 
-    # 3. System Dependencies
-    log "Installing system dependencies..."
-    sudo apt-get update
-    sudo apt-get install -y python3 python3-venv sqlite3 nodejs npm debian-keyring debian-archive-keyring apt-transport-https curl ufw
-    
-    # Install Caddy
-    if ! command -v caddy &> /dev/null; then
-        log "Installing Caddy..."
-        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
-        sudo apt-get update
-        sudo apt-get install -y caddy
-    fi
+    ZONE="us-central1-a"
+    read -p "Enter Environment Label (e.g., dev, prod) [prod]: " ENV_LABEL
+    ENV_LABEL=${ENV_LABEL:-prod}
+    INSTANCE_NAME="nexus-v3-$ENV_LABEL"
 
-    # 4. Directory Structure
-    log "Creating directory structure..."
-    sudo mkdir -p "$SHARED_DIR/data" "$SHARED_DIR/logs" "$SHARED_DIR/tmp" "$RELEASES_DIR"
-    sudo chown -R $USER:$USER "$NEXUS_ROOT"
+    echo -e "\n${CYAN}[2/6] Enabling APIs...${NC}"
+    gcloud services enable gmail.googleapis.com drive.googleapis.com pubsub.googleapis.com \
+        documentai.googleapis.com compute.googleapis.com --project="$PROJECT_ID"
 
-    # 5. Swap File (2GB)
-    if [ ! -f "/swapfile" ]; then
-        log "Creating 2GB swap file..."
-        sudo fallocate -l 2G /swapfile
-        sudo chmod 600 /swapfile
-        sudo mkswap /swapfile
-        sudo swapon /swapfile
-        echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+    echo -e "\n${CYAN}[3/6] Configuring Network Security...${NC}"
+    if gcloud compute firewall-rules describe allow-http-https-nexus &> /dev/null; then
+        echo -e "${GREEN}Firewall rule 'allow-http-https-nexus' exists.${NC}"
     else
-        log "Swap file already exists."
+        gcloud compute firewall-rules create allow-http-https-nexus \
+            --action=ALLOW --rules=tcp:80,tcp:443,tcp:22 --source-ranges=0.0.0.0/0 \
+            --target-tags=http-server,https-server --project="$PROJECT_ID"
     fi
 
-    # 6. Firewall
-    log "Configuring UFW..."
-    sudo ufw allow 22/tcp
-    sudo ufw allow 443/tcp
-    sudo ufw --force enable
+    echo -e "\n${CYAN}[4/6] Injecting Environment Secrets...${NC}"
+    read -p "NEXUS_HMAC_SECRET (Random 64-char string): " NEXUS_HMAC_SECRET
+    read -p "NEXUS_API_KEY (Gemini): " NEXUS_API_KEY
+    read -p "NEXUS_PUBLIC_DOMAIN (e.g., nexus.yourdomain.com): " NEXUS_PUBLIC_DOMAIN
+    read -p "AUTHORIZED_EMAILS (comma separated): " AUTHORIZED_EMAILS
+    read -p "GOOGLE_CLIENT_ID: " GOOGLE_CLIENT_ID
+    read -p "DOCAI_PROJECT_ID: " DOCAI_PROJECT_ID
+    read -p "DOCAI_PROCESSOR_ID: " DOCAI_PROCESSOR_ID
 
-    # 7. GCP Pub/Sub Provisioning
-    log "Provisioning GCP Pub/Sub..."
-    TOPIC_NAME="nexus-incoming-topic"
-    SUB_NAME="nexus-incoming-sub"
-    PUSH_ENDPOINT="https://${NEXUS_PUBLIC_DOMAIN}/webhook/gmail"
+    cat > .nexus_env <<EOF
+TARGET_VM=$INSTANCE_NAME
+TARGET_ZONE=$ZONE
+PROJECT_ID=$PROJECT_ID
+NEXUS_PUBLIC_DOMAIN=$NEXUS_PUBLIC_DOMAIN
+EOF
 
-    if ! gcloud pubsub topics describe $TOPIC_NAME &> /dev/null; then
-        gcloud pubsub topics create $TOPIC_NAME
-        log "Created topic $TOPIC_NAME"
-    fi
+    echo -e "\n${CYAN}[5/6] Provisioning the Virtual Machine...${NC}"
+    gcloud compute instances create "$INSTANCE_NAME" \
+        --project="$PROJECT_ID" --zone="$ZONE" --machine-type=e2-micro \
+        --image-family=debian-12 --image-project=debian-cloud \
+        --boot-disk-size=30GB --boot-disk-type=pd-standard \
+        --tags=http-server,https-server \
+        --scopes=https://www.googleapis.com/auth/cloud-platform \
+        --metadata=startup-script='#!/bin/bash
+echo ">>> Starting Nexus Bootstrap..."
+apt-get update
+apt-get install -y python3 python3-pip python3-venv sqlite3 git curl nodejs npm
+curl -1sLf "https://dl.cloudsmith.io/public/caddy/stable/gpg.key" | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf "https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt" | tee /etc/apt/sources.list.d/caddy-stable.list
+apt-get update && apt-get install -y caddy
+echo ">>> Configuring 2GB Swap Space..."
+fallocate -l 2G /swapfile
+chmod 600 /swapfile
+mkswap /swapfile
+swapon /swapfile
+echo "/swapfile none swap sw 0 0" >> /etc/fstab
+mkdir -p /opt/nexus/shared/data /opt/nexus/shared/logs /opt/nexus/shared/tmp /opt/nexus/releases
+chown -R '"$USER:$USER"' /opt/nexus
+'
+    
+    echo -e "${YELLOW}Waiting 45 seconds for VM and packages to initialize...${NC}"
+    sleep 45
 
-    if ! gcloud pubsub subscriptions describe $SUB_NAME &> /dev/null; then
-        gcloud pubsub subscriptions create $SUB_NAME \
-            --topic=$TOPIC_NAME \
-            --push-endpoint="$PUSH_ENDPOINT"
-        log "Created push subscription $SUB_NAME pointing to $PUSH_ENDPOINT"
+    gcloud compute ssh "$INSTANCE_NAME" --zone="$ZONE" --command="
+        cat <<EOF > /opt/nexus/shared/.env
+NEXUS_HMAC_SECRET='$NEXUS_HMAC_SECRET'
+NEXUS_API_KEY='$NEXUS_API_KEY'
+NEXUS_PUBLIC_DOMAIN='$NEXUS_PUBLIC_DOMAIN'
+AUTHORIZED_EMAILS='$AUTHORIZED_EMAILS'
+GOOGLE_CLIENT_ID='$GOOGLE_CLIENT_ID'
+DOCAI_PROJECT_ID='$DOCAI_PROJECT_ID'
+DOCAI_LOCATION='us'
+DOCAI_PROCESSOR_ID='$DOCAI_PROCESSOR_ID'
+EOF
+    "
+
+    read -p "Enter path to your credentials.json file (leave blank to skip): " CREDS_PATH
+    if [ -n "$CREDS_PATH" ] && [ -f "$CREDS_PATH" ]; then
+        gcloud compute scp "$CREDS_PATH" "$INSTANCE_NAME:/opt/nexus/shared/credentials.json" --zone="$ZONE"
     else
-        # Update push endpoint just in case
-        gcloud pubsub subscriptions modify-push-config $SUB_NAME --push-endpoint="$PUSH_ENDPOINT"
-        log "Updated push subscription $SUB_NAME endpoint to $PUSH_ENDPOINT"
+        echo -e "${YELLOW}Skipped credentials.json. Please upload it to /opt/nexus/shared/ manually later.${NC}"
     fi
 
-    log "Provisioning Complete."
+    echo -e "\n${CYAN}[6/6] Provisioning Pub/Sub...${NC}"
+    gcloud pubsub topics create nexus-incoming-topic --project="$PROJECT_ID" || true
+    gcloud pubsub subscriptions create nexus-incoming-sub --topic=nexus-incoming-topic \
+        --push-endpoint="https://$NEXUS_PUBLIC_DOMAIN/webhook/gmail" --project="$PROJECT_ID" || \
+    gcloud pubsub subscriptions modify-push-config nexus-incoming-sub \
+        --push-endpoint="https://$NEXUS_PUBLIC_DOMAIN/webhook/gmail" --project="$PROJECT_ID"
+
+    VM_IP=$(gcloud compute instances describe "$INSTANCE_NAME" --zone="$ZONE" --format="get(networkInterfaces[0].accessConfigs[0].natIP)")
+    
+    echo -e "\n${GREEN}====================================================${NC}"
+    echo -e "${GREEN}Provisioning Complete!${NC}"
+    echo -e "Your VM IP Address is: ${YELLOW}$VM_IP${NC}"
+    echo -e "ACTION REQUIRED: Go to your DNS provider and point ${YELLOW}$NEXUS_PUBLIC_DOMAIN${NC} to ${YELLOW}$VM_IP${NC}"
+    echo -e "Once DNS propagates, run ${CYAN}./nexus.sh --deploy${NC} to push your code!"
 }
 
 deploy() {
-    log "Starting Zero-Downtime Deployment..."
+    load_env
+    echo -e "\n${CYAN}Starting Zero-Downtime Deployment to $TARGET_VM...${NC}"
     
-    source "$ENV_FILE"
-
-    # 1. Prepare new release directory
-    RELEASE_TAG=$(date +%Y%m%d_%H%M%S)
-    RELEASE_PATH="$RELEASES_DIR/$RELEASE_TAG"
-    mkdir -p "$RELEASE_PATH"
+    echo "1. Packaging local repository (excluding node_modules/ignored files)..."
+    tar -czf /tmp/nexus_release.tar.gz --exclude='.git' --exclude='node_modules' --exclude='frontend/node_modules' --exclude='.env' --exclude='credentials.json' --exclude='token.json' --exclude='AUDITS' .
     
-    log "Copying codebase to $RELEASE_PATH..."
-    # Copy all files from current repo, excluding .git
-    rsync -a --exclude='.git' ./ "$RELEASE_PATH/"
+    echo "2. Pushing package to VM..."
+    gcloud compute scp /tmp/nexus_release.tar.gz "$TARGET_VM:/tmp/nexus_release.tar.gz" --zone="$TARGET_ZONE"
     
-    # 2. SPA Build
-    log "Building SPA..."
-    if [ -f "$RELEASE_PATH/frontend/package.json" ]; then
-        (cd "$RELEASE_PATH/frontend" && npm install && npm run build)
-    else
-        log "package.json not found, creating UI Stub..."
-        mkdir -p "$RELEASE_PATH/frontend/dist"
-        echo "<h1>Nexus V3 UI Stub</h1>" > "$RELEASE_PATH/frontend/dist/index.html"
-    fi
-
-    # 3. Python Virtual Environment
-    log "Setting up Python venv..."
-    python3 -m venv "$RELEASE_PATH/venv"
-    source "$RELEASE_PATH/venv/bin/activate"
-    pip install -r "$RELEASE_PATH/requirements.txt"
-
-    # 4. Database Initialization
-    log "Running database initialization..."
-    export NEXUS_SHARED_DIR="$SHARED_DIR"
-    python "$RELEASE_PATH/backend/db_init.py"
-    deactivate
-
-    # 5. Update Symlink
-    log "Updating current symlink..."
-    ln -sfn "$RELEASE_PATH" "$CURRENT_DIR"
-
-    # 6. Setup Caddy
-    log "Configuring Caddy..."
-    cat <<EOF | sudo tee /etc/caddy/Caddyfile
-${NEXUS_PUBLIC_DOMAIN} {
-    root * ${CURRENT_DIR}/frontend/dist
+    echo "3. Executing remote build process..."
+    gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --command="
+        set -e
+        RELEASE_DIR=/opt/nexus/releases/\$(date +%Y%m%d_%H%M%S)
+        mkdir -p \$RELEASE_DIR
+        tar -xzf /tmp/nexus_release.tar.gz -C \$RELEASE_DIR
+        
+        echo '-> Building Frontend SPA (Remote Build Law)'
+        cd \$RELEASE_DIR/frontend
+        npm install
+        npm run build
+        
+        echo '-> Building Backend Virtual Environment'
+        cd \$RELEASE_DIR
+        python3 -m venv venv
+        source venv/bin/activate
+        pip install -r requirements.txt
+        
+        echo '-> Executing Database Migrations'
+        export NEXUS_SHARED_DIR=/opt/nexus/shared
+        python backend/db_init.py
+        
+        echo '-> Updating Symlinks'
+        ln -sfn \$RELEASE_DIR /opt/nexus/current
+        
+        echo '-> Configuring Caddy & Systemd'
+        source /opt/nexus/shared/.env
+        sudo bash -c \"cat > /etc/caddy/Caddyfile <<EOF
+\$NEXUS_PUBLIC_DOMAIN {
+    root * /opt/nexus/current/frontend/dist
     file_server
-    
-    handle /api/* {
-        reverse_proxy 127.0.0.1:8000
-    }
-    handle /webhook/* {
-        reverse_proxy 127.0.0.1:8000
-    }
+    handle /api/* { reverse_proxy 127.0.0.1:8000 }
+    handle /webhook/* { reverse_proxy 127.0.0.1:8000 }
 }
-EOF
-    sudo systemctl reload caddy
+EOF\"
+        sudo systemctl reload caddy
 
-    # 7. Setup Systemd
-    log "Configuring systemd..."
-    cat <<EOF | sudo tee /etc/systemd/system/nexus.service
+        sudo bash -c \"cat > /etc/systemd/system/nexus.service <<EOF
 [Unit]
 Description=Nexus V3 Daemon
 After=network.target
 
 [Service]
-User=$USER
-WorkingDirectory=${CURRENT_DIR}
-Environment="PATH=${CURRENT_DIR}/venv/bin"
-EnvironmentFile=${ENV_FILE}
-Environment="NEXUS_SHARED_DIR=${SHARED_DIR}"
-ExecStart=${CURRENT_DIR}/venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 8000
+User=\$USER
+WorkingDirectory=/opt/nexus/current
+Environment=PATH=/opt/nexus/current/venv/bin
+EnvironmentFile=/opt/nexus/shared/.env
+Environment=NEXUS_SHARED_DIR=/opt/nexus/shared
+ExecStart=/opt/nexus/current/venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 8000
 Restart=always
 
 [Install]
 WantedBy=multi-user.target
-EOF
-
-    sudo systemctl daemon-reload
-    sudo systemctl enable nexus.service
-    sudo systemctl restart nexus.service
-
-    # 8. Log Rotation
-    log "Configuring Logrotate..."
-    cat <<EOF | sudo tee /etc/logrotate.d/nexus
-${SHARED_DIR}/logs/*.log {
+EOF\"
+        
+        sudo bash -c \"cat > /etc/logrotate.d/nexus <<EOF
+/opt/nexus/shared/logs/*.log {
     daily
     rotate 7
     compress
@@ -214,35 +217,85 @@ ${SHARED_DIR}/logs/*.log {
     missingok
     notifempty
 }
-EOF
+EOF\"
 
-    log "Deployment Complete. $RELEASE_TAG is now live."
+        sudo systemctl daemon-reload
+        sudo systemctl enable nexus.service
+        sudo systemctl restart nexus.service
+        echo '-> Deployment Complete!'
+    "
+    rm /tmp/nexus_release.tar.gz
+    echo -e "${GREEN}System is LIVE at https://$NEXUS_PUBLIC_DOMAIN${NC}"
+}
+
+auth_tunnel() {
+    load_env
+    echo -e "\n${YELLOW}Opening SSH Tunnel to $TARGET_VM on port 8080...${NC}"
+    echo -e "When the Google Auth link appears, CTRL+CLICK to open it in your browser."
+    
+    AUTH_CMD="sudo systemctl stop nexus.service; export NEXUS_SHARED_DIR=/opt/nexus/shared; cd /opt/nexus/current && source venv/bin/activate && pip install google-auth-oauthlib google-api-python-client --quiet && python backend/auth/workspace_auth.py; sudo systemctl start nexus.service"
+    
+    gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --ssh-flag="-L" --ssh-flag="8080:127.0.0.1:8080" --command="$AUTH_CMD"
+}
+
+health() {
+    load_env
+    echo -e "\n${CYAN}Fetching Health Status for $TARGET_VM...${NC}"
+    gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --command="
+        echo -e '\n--- Systemd Service ---'
+        sudo systemctl status nexus.service --no-pager | head -n 5
+        echo -e '\n--- Caddy Proxy Status ---'
+        sudo systemctl status caddy --no-pager | head -n 5
+        echo -e '\n--- Disk Space ---'
+        df -h / | tail -n 2
+        echo -e '\n--- Database Sizes ---'
+        ls -lh /opt/nexus/shared/data/*.db 2>/dev/null || echo 'No databases found.'
+        echo -e '\n--- Worker Errors ---'
+        sudo journalctl -u nexus.service -n 20 --no-pager | grep -i error || echo 'No recent errors.'
+    "
+}
+
+clean() {
+    load_env
+    echo -e "\n${YELLOW}Cleaning old releases and running SQLite VACUUM...${NC}"
+    gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --command="
+        current_rel=\$(readlink -f \"/opt/nexus/current\")
+        ls -d /opt/nexus/releases/*/ 2>/dev/null | grep -v \"\$current_rel\" | xargs -I {} sudo rm -rf {}
+        sqlite3 /opt/nexus/shared/data/nexus_core.db 'VACUUM;'
+        sqlite3 /opt/nexus/shared/data/nexus_kb.db 'VACUUM;'
+        echo 'Cleanup complete.'
+    "
 }
 
 show_menu() {
-    echo "=============================="
-    echo "       NEXUS V3 DEVOPS        "
-    echo "=============================="
-    echo "1. Provision Infrastructure"
-    echo "2. Deploy Application"
-    echo "3. Exit"
-    echo "=============================="
+    echo -e "${CYAN}====================================================${NC}"
+    echo -e "${CYAN}       NEXUS V3 MASTER CONTROL PANEL (LOCAL)        ${NC}"
+    echo -e "${CYAN}====================================================${NC}"
+    echo "1. Provision Infrastructure (--provision)"
+    echo "2. Deploy Source Code (--deploy)"
+    echo "3. Open Auth Tunnel (--auth-tunnel)"
+    echo "4. Fleet Health Dashboard (--health)"
+    echo "5. Clean Old Releases & Vacuum DB (--clean)"
+    echo "6. Exit"
+    echo -e "${CYAN}====================================================${NC}"
     read -p "Select an option: " opt
     case $opt in
         1) provision ;;
         2) deploy ;;
-        3) exit 0 ;;
-        *) error "Invalid option" ;;
+        3) auth_tunnel ;;
+        4) health ;;
+        5) clean ;;
+        6) exit 0 ;;
+        *) echo -e "${RED}Invalid option${NC}" ;;
     esac
 }
 
 case "$1" in
     --provision) provision ;;
     --deploy) deploy ;;
-    --auth-tunnel) log "Auth tunnel placeholder" ;;
-    --health) log "Health check placeholder" ;;
-    --backup) log "Backup placeholder" ;;
-    --clean) log "Clean placeholder" ;;
+    --auth-tunnel) auth_tunnel ;;
+    --health) health ;;
+    --clean) clean ;;
     "") show_menu ;;
-    *) error "Unknown argument: $1" ;;
+    *) echo -e "${RED}Unknown argument: $1${NC}" ;;
 esac
