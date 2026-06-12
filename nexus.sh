@@ -31,6 +31,7 @@ load_env() {
     TARGET_ZONE=$(grep "^TARGET_ZONE=" .nexus_env | cut -d'=' -f2 | tr -d '\r')
     PROJECT_ID=$(grep "^PROJECT_ID=" .nexus_env | cut -d'=' -f2 | tr -d '\r')
     NEXUS_PUBLIC_DOMAIN=$(grep "^NEXUS_PUBLIC_DOMAIN=" .nexus_env | cut -d'=' -f2 | tr -d '\r')
+    CLOUDFLARE_API_TOKEN=$(grep "^CLOUDFLARE_API_TOKEN=" .nexus_env | cut -d'=' -f2 | tr -d '\r' || true)
 }
 
 provision() {
@@ -68,6 +69,8 @@ provision() {
     read -p "NEXUS_HMAC_SECRET (Random 64-char string): " NEXUS_HMAC_SECRET
     read -p "NEXUS_API_KEY (Gemini): " NEXUS_API_KEY
     read -p "NEXUS_PUBLIC_DOMAIN (e.g., nexus.yourdomain.com): " NEXUS_PUBLIC_DOMAIN
+    echo -e "${YELLOW}(Optional) To automatically fetch SSL certs behind the Cloudflare Proxy (Orange Cloud), provide a DNS API Token.${NC}"
+    read -p "CLOUDFLARE_API_TOKEN (Leave blank if not using CF proxy): " CLOUDFLARE_API_TOKEN
     read -p "AUTHORIZED_EMAILS (comma separated): " AUTHORIZED_EMAILS
     read -p "GOOGLE_CLIENT_ID: " GOOGLE_CLIENT_ID
     read -p "DOCAI_PROJECT_ID: " DOCAI_PROJECT_ID
@@ -78,6 +81,7 @@ TARGET_VM=$INSTANCE_NAME
 TARGET_ZONE=$ZONE
 PROJECT_ID=$PROJECT_ID
 NEXUS_PUBLIC_DOMAIN=$NEXUS_PUBLIC_DOMAIN
+CLOUDFLARE_API_TOKEN=$CLOUDFLARE_API_TOKEN
 EOF
 
     echo -e "\n${CYAN}[5/6] Provisioning the Virtual Machine...${NC}"
@@ -94,12 +98,19 @@ apt-get install -y python3 python3-pip python3-venv sqlite3 git curl nodejs npm
 curl -1sLf "https://dl.cloudsmith.io/public/caddy/stable/gpg.key" | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 curl -1sLf "https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt" | tee /etc/apt/sources.list.d/caddy-stable.list
 apt-get update && apt-get install -y caddy
+
+echo ">>> Injecting Cloudflare Caddy Module..."
+curl -1sLf -o /usr/bin/caddy "https://caddyserver.com/api/download?os=linux&arch=amd64&p=github.com%2Fcaddy-dns%2Fcloudflare"
+chmod +x /usr/bin/caddy
+systemctl restart caddy
+
 echo ">>> Configuring 2GB Swap Space..."
 fallocate -l 2G /swapfile
 chmod 600 /swapfile
 mkswap /swapfile
 swapon /swapfile
 echo "/swapfile none swap sw 0 0" >> /etc/fstab
+
 mkdir -p /opt/nexus/shared/data /opt/nexus/shared/logs /opt/nexus/shared/tmp /opt/nexus/releases
 chown -R '"$USER:$USER"' /opt/nexus
 '
@@ -112,6 +123,7 @@ chown -R '"$USER:$USER"' /opt/nexus
 NEXUS_HMAC_SECRET='$NEXUS_HMAC_SECRET'
 NEXUS_API_KEY='$NEXUS_API_KEY'
 NEXUS_PUBLIC_DOMAIN='$NEXUS_PUBLIC_DOMAIN'
+CLOUDFLARE_API_TOKEN='$CLOUDFLARE_API_TOKEN'
 AUTHORIZED_EMAILS='$AUTHORIZED_EMAILS'
 GOOGLE_CLIENT_ID='$GOOGLE_CLIENT_ID'
 DOCAI_PROJECT_ID='$DOCAI_PROJECT_ID'
@@ -139,7 +151,11 @@ EOF
     echo -e "\n${GREEN}====================================================${NC}"
     echo -e "${GREEN}Provisioning Complete!${NC}"
     echo -e "Your VM IP Address is: ${YELLOW}$VM_IP${NC}"
-    echo -e "ACTION REQUIRED: Go to your DNS provider and point ${YELLOW}$NEXUS_PUBLIC_DOMAIN${NC} to ${YELLOW}$VM_IP${NC}"
+    if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+        echo -e "Ensure your Cloudflare DNS record points to ${YELLOW}$VM_IP${NC} (Orange Cloud Proxy is OK!)."
+    else
+        echo -e "ACTION REQUIRED: Go to your DNS provider and point ${YELLOW}$NEXUS_PUBLIC_DOMAIN${NC} to ${YELLOW}$VM_IP${NC}"
+    fi
     echo -e "Once DNS propagates, run ${CYAN}./nexus.sh --deploy${NC} to push your code!"
 }
 
@@ -180,8 +196,15 @@ deploy() {
         
         echo '-> Configuring Caddy & Systemd'
         source /opt/nexus/shared/.env
+        
+        TLS_BLOCK=\"\"
+        if [ -n \"\$CLOUDFLARE_API_TOKEN\" ]; then
+            TLS_BLOCK=\"tls { dns cloudflare \$CLOUDFLARE_API_TOKEN }\"
+        fi
+
         sudo bash -c \"cat > /etc/caddy/Caddyfile <<EOF
 \$NEXUS_PUBLIC_DOMAIN {
+    \$TLS_BLOCK
     root * /opt/nexus/current/frontend/dist
     file_server
     handle /api/* { reverse_proxy 127.0.0.1:8000 }
