@@ -1,47 +1,104 @@
-# Nexus V3 Deployment Playbook
+# Nexus V3: The Beginner's Deployment Playbook
 
-This document details the exact procedures for provisioning infrastructure and deploying Nexus V3 in a production Google Cloud Platform (GCP) environment using the local `nexus.sh` orchestrator.
+Welcome to Nexus V3! Because this system operates as a private, secure, Asynchronous Closed-Loop Fusion Engine, you are going to host it on your own Google Cloud server. 
 
-**CRITICAL PARADIGM SHIFT:** The `nexus.sh` script is a **Local Remote-Control Utility**. You MUST run it on your local workstation (Mac Terminal, Git Bash, or WSL). It uses `gcloud` to dynamically create the server and pipe your local code directly over an SSH tunnel.
+You do not need to be a DevOps engineer to deploy this. The `nexus.sh` script does 95% of the heavy lifting. However, before you run the script, you must gather **8 specific configuration keys** from various Google and Cloudflare dashboards. 
 
-## 1. GCP Manual Pre-Flight Steps
+Follow this guide step-by-step. Open a blank notepad on your computer to collect these 8 items as we go.
 
-Before running the automated scripts, you must configure Google's OAuth screens:
+---
 
-1. **Create the GCP Project & Billing:** Create a new project and ensure a billing account is linked (the `e2-micro` VM is in the Always Free tier).
-2. **Configure the OAuth Consent Screen:** 
-    * Set User Type to "External" and Publishing Status to **"In production"**.
-    * Add your Google account email to the Test Users (if applicable).
-3. **Create OAuth 2.0 Credentials:** 
-    * Go to APIs & Services > Credentials. Create an **OAuth 2.0 Client ID** of type **Desktop app**.
-    * Download the JSON file and rename it exactly to `credentials.json`. Keep it in your local Nexus project root folder.
-4. **Configure Document AI:** 
-    * Navigate to Document AI. Create a new **Document OCR Processor**. Keep the Project ID, Location (e.g., `us`), and Processor ID handy for the script.
+## Phase 1: The Secrets Checklist (Gather These First!)
 
-## 2. Automated Infrastructure Provisioning
+### 1. Your Domain Name & Cloudflare API Token (`NEXUS_PUBLIC_DOMAIN` & `CLOUDFLARE_API_TOKEN`)
+You need a web address (domain) to access your Nexus dashboard.
+1. You must own a domain name (e.g., `yourdomain.com`).
+2. Decide on the specific URL you will use for Nexus (e.g., `nexus.yourdomain.com`). 
+   * 👉 **Save this as your `NEXUS_PUBLIC_DOMAIN`.**
+3. *(Optional but Highly Recommended):* Route your domain's DNS through Cloudflare (it's free).
+   * Go to Cloudflare > My Profile (top right) > API Tokens > Create Token > Create Custom Token.
+   * Permissions: `Zone` | `DNS` | `Edit`.
+   * Zone Resources: `Include` | `Specific Zone` | `yourdomain.com`.
+   * Click Continue to summary, then Create Token. Copy the secret token.
+   * 👉 **Save this as your `CLOUDFLARE_API_TOKEN`.** (If you don't use Cloudflare, leave this blank later).
 
-Open your local terminal at the root of the repository. Make sure the script is executable (`chmod +x nexus.sh`).
+### 2. Your Google Cloud Project (`DOCAI_PROJECT_ID`)
+Google Cloud is where your server and databases will live.
+1. Go to the [Google Cloud Console](https://console.cloud.google.com) and sign in.
+2. Click the dropdown at the top left (next to the Google Cloud logo) and click **New Project**.
+3. Name it `nexus-ai-engine` and click **Create**.
+4. Make sure your new project is selected at the top. Look at the "Project Info" card on your dashboard. Note the **Project ID** (it might have numbers at the end, like `nexus-ai-engine-12345`). 
+   * 👉 **Save this as your `DOCAI_PROJECT_ID`.**
+5. *Billing:* Go to **Billing** in the left menu and link a credit card. The server you will build is part of Google's "Always Free" tier, but Google requires a card on file to use cloud features.
 
-Run the script and select **Option 1**:
+### 3. Your Gemini AI Brain (`NEXUS_API_KEY`)
+This gives Nexus its intelligence.
+1. Go to [Google AI Studio](https://aistudio.google.com/).
+2. Sign in, and click **Get API key** in the left menu.
+3. Click **Create API key** and select your new Google Cloud Project (`nexus-ai-engine`).
+4. Copy the long string of letters and numbers generated. 
+   * 👉 **Save this as your `NEXUS_API_KEY`.**
 
-<pre><code class="language-bash">./nexus.sh</code></pre>
+### 4. Your Document OCR Reader (`DOCAI_LOCATION` & `DOCAI_PROCESSOR_ID`)
+This lets Nexus read text from scanned PDFs and images.
+1. In the Google Cloud Console, search for "Document AI" in the top search bar. Click **Enable API** if prompted.
+2. Click **Explore Processors**, find **Document OCR**, and click **Create Processor**.
+3. Name it `nexus-ocr` and set the region to `us`. 
+   * 👉 **Save `us` as your `DOCAI_LOCATION`.**
+4. Once created, go to the Processor Details page. You will see an ID string that looks like `1a2b3c4d5e6f7g8h`. 
+   * 👉 **Save this as your `DOCAI_PROCESSOR_ID`.**
 
-* **What it does:** It creates a local `.nexus_env` tracking file, enables all APIs, spawns the GCP `e2-micro` VM, punches holes in the Google Firewall for ports 80/443, installs Caddy/Node/Python on the VM via a startup script, provisions a 2GB OS Swap file to prevent memory panics, securely transfers your secrets to `/opt/nexus/shared/.env`, uploads your `credentials.json`, and creates the Pub/Sub topics.
+### 5. Your Login Security (`GOOGLE_CLIENT_ID` & `credentials.json`)
+This creates the secure "Sign in with Google" button so Nexus can read your Gmail/Drive.
+1. **Consent Screen:** In the Google Cloud Console, search for "OAuth consent screen".
+   * Choose **External** (or Internal if you are a Google Workspace business user) and click Create.
+   * App name: `Nexus`. Select your email for the support and developer contact emails. Click Save and Continue.
+   * *Skip Scopes and Test Users by clicking Save and Continue.*
+   * **CRITICAL:** On the summary screen, click the **Publish App** button to push it to "In production". If you leave it in "Testing", your login tokens will expire every 7 days!
+2. **Create Credentials:** Click **Credentials** on the left menu.
+   * Click **+ CREATE CREDENTIALS** -> **OAuth client ID**.
+   * Application type: **Desktop app**. Name it `Nexus Auth`. Click Create.
+   * A box will pop up. Copy your "Client ID" (it ends in `.apps.googleusercontent.com`). 
+     * 👉 **Save this as your `GOOGLE_CLIENT_ID`.**
+   * **CRITICAL:** Click the **Download JSON** button on that popup. Save it to your computer, rename it exactly to `credentials.json`, and place it inside your `Nexus-for-Google` folder (right next to the `nexus.sh` script).
 
-**CRITICAL DNS STEP:** At the end of Option 1, the script will output the VM's Public IP address. You MUST go to your DNS provider and point an `A Record` for your domain (e.g., `nexus.yourdomain.com`) to this IP address before proceeding to deployment, so Caddy can automatically fetch the Let's Encrypt SSL certificate.
+### 6. Your Digital Lock (`NEXUS_HMAC_SECRET`)
+This is a cryptographic secret used to lock your login session cookies. 
+* Mash your keyboard right now to make a random 64-character string (e.g., `kjasdhfkjashdfkjh8923749823hjkfhsdf890234hjkfhsdf`).
+* 👉 **Save this as your `NEXUS_HMAC_SECRET`.**
 
-## 3. Zero-Downtime Deployment
-Wait 5 minutes for your DNS record to propagate, run the script, and select **Option 2**:
+### 7. The VIP List (`AUTHORIZED_EMAILS`)
+Write down a comma-separated list of exact Google email addresses allowed to log into your app.
+* 👉 **Save this as your `AUTHORIZED_EMAILS`** (e.g., `you@gmail.com,partner@gmail.com`).
 
-<pre><code class="language-bash">./nexus.sh</code></pre>
+---
 
-* **What it does:** It connects to the VM, securely transfers your local code via a `.tar.gz` bundle, and triggers a remote build. It runs `npm install` and `npm run build` natively on the server, installs the Python dependencies, runs the SQLite database migrations, and hot-swaps the Caddy and Systemd daemon pointers for a zero-downtime release.
+## Phase 2: Automated Deployment
 
-## 4. Setting Up the Auth Tunnel
-The backend requires a `token.json` file to communicate with Google Workspace APIs. Because the VM is headless, we must tunnel the OAuth request to your local browser.
+Open your local terminal (Mac Terminal, Git Bash, or WSL) inside your project folder. Make sure the script is executable by running: 
+<pre><code class="language-bash">chmod +x nexus.sh</code></pre>
 
-Run the script and select **Option 3**:
+### Step 1: Provision Infrastructure
+Run the control panel:
+<pre><code class="language-bash">./nexus.sh --provision</code></pre>
+* The script will ask you to log in to your Google Account.
+* It will prompt you to paste in all the variables you gathered in Phase 1.
+* It will then talk to Google, create a free-tier virtual machine server, configure firewalls, and install the necessary software.
 
-<pre><code class="language-bash">./nexus.sh</code></pre>
+**CRITICAL DNS STEP:** At the end of this step, the terminal will output your new server's **Public IP Address**. Go to your domain provider (e.g., Cloudflare, GoDaddy) and create an **A Record** pointing `nexus.yourdomain.com` to that IP address.
 
-* **What it does:** It safely pauses the backend daemon, opens an SSH tunnel mapping the VM's port 8080 to your local port 8080, and runs `workspace_auth.py`. Click the link that appears in the terminal to authorize the application. Once complete, the token is saved on the server and the daemon automatically resumes!
+### Step 2: Zero-Downtime Deployment
+Wait about 5 minutes for your DNS record to propagate across the internet, then run:
+<pre><code class="language-bash">./nexus.sh --deploy</code></pre>
+* The script will compress your code, securely upload it to your new server, build the React frontend, set up the databases, and launch the web server.
+
+### Step 3: Setting Up the Auth Tunnel
+The server is now running, but it doesn't have permission to read your emails yet. We need to create a secure tunnel to the server to grant it access.
+<pre><code class="language-bash">./nexus.sh --auth-tunnel</code></pre>
+* The script will pause the server and open a secure tunnel to your computer.
+* A link will appear in your terminal. **Ctrl+Click** it to open it in your browser. 
+* Google will warn you that the app isn't verified (because you just made it). Click **Advanced** -> **Go to Nexus (unsafe)**. Click **Continue** to grant the permissions.
+* Return to your terminal. The script will automatically save the connection token and restart your Nexus server!
+
+### You are done! 🎉
+Navigate to your domain (`https://nexus.yourdomain.com`). Log in with Google, open the **System Settings** menu (gear icon), and click **Generate & Apply Theme** to bring Nexus V3 to life.
