@@ -1,5 +1,5 @@
 #!/bin/bash
-# nexus.sh - Local Workstation DevSecOps CLI for Nexus V3
+# nexus.sh - Local Workstation DevSecOps CLI for Nexus
 
 set -e
 set -o pipefail
@@ -14,7 +14,7 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 echo -e "${CYAN}====================================================${NC}"
-echo -e "${CYAN}      NEXUS V3: MASTER CONTROL & DEPLOYMENT         ${NC}"
+echo -e "${CYAN}      NEXUS: MASTER CONTROL & DEPLOYMENT         ${NC}"
 echo -e "${CYAN}====================================================${NC}"
 
 # Ensure gcloud is installed
@@ -51,7 +51,7 @@ provision() {
     ZONE="us-central1-a"
     read -p "Enter Environment Label (e.g., dev, prod) [prod]: " ENV_LABEL
     ENV_LABEL=${ENV_LABEL:-prod}
-    INSTANCE_NAME="nexus-v3-$ENV_LABEL"
+    INSTANCE_NAME="nexus-$ENV_LABEL"
 
     echo -e "\n${CYAN}[2/6] Enabling APIs...${NC}"
     gcloud services enable gmail.googleapis.com drive.googleapis.com pubsub.googleapis.com \
@@ -284,7 +284,7 @@ EOF\"
 
         sudo bash -c \"cat > /etc/systemd/system/nexus.service <<EOF
 [Unit]
-Description=Nexus V3 Daemon
+Description=Nexus Daemon
 After=network.target
 
 [Service]
@@ -361,7 +361,7 @@ clean() {
 
 show_menu() {
     echo -e "${CYAN}====================================================${NC}"
-    echo -e "${CYAN}       NEXUS V3 MASTER CONTROL PANEL (LOCAL)        ${NC}"
+    echo -e "${CYAN}       NEXUS MASTER CONTROL PANEL (LOCAL)        ${NC}"
     echo -e "${CYAN}====================================================${NC}"
     echo "1. Provision Infrastructure (--provision)"
     echo "2. Deploy Source Code (--deploy)"

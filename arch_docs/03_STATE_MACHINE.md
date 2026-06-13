@@ -1,7 +1,7 @@
 # Layer 3: The State Machine
 
 ## 3.1 The Asynchronous Fusion Engine
-Nexus V3 contains NO linear Python pipelines. Every step of processing is handled by an isolated, asynchronous worker loop that queries `WORKSPACE_ARTIFACTS` for a specific `state`.
+Nexus contains NO linear Python pipelines. Every step of processing is handled by an isolated, asynchronous worker loop that queries `WORKSPACE_ARTIFACTS` for a specific `state`.
 
 ###   `SUB` (Pub/Sub Envelope Ingress)
 *   **Trigger:** Google Webhooks hit the API. 
@@ -115,7 +115,7 @@ sequenceDiagram
 ```
 
 ## 3.3 The Sweeper Engine & Batch Strategy
-Nexus V3 MUST seamlessly handle massive historical data imports without locking the UI, delaying real-time webhooks, or exhausting LLM API budgets.
+Nexus MUST seamlessly handle massive historical data imports without locking the UI, delaying real-time webhooks, or exhausting LLM API budgets.
 
 ### 3.3.1 The Priority Polling Law
 Every single Asynchronous Worker (`TRIAGE`, `EVALUATING`, `ASSIMILATING`, `ACTIONABLE`) MUST pull its next task using strict priority ordering:

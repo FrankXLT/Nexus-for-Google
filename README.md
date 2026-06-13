@@ -1,6 +1,6 @@
-# Nexus V3: Asynchronous Closed-Loop Fusion Engine
+# Nexus for Google: Asynchronous Closed-Loop Fusion Engine
 
-Nexus V3 is an enterprise-grade AI engine designed to bridge the gap between unstructured data sources (Gmail, Google Drive) and a structured knowledge graph ontology. It employs a 7-Layer Architecture to maintain a single source of truth, enforce declarative access control, and provide a visually generative UI interface.
+Nexus for Google is an enterprise-grade AI engine designed to bridge the gap between unstructured data sources (Gmail, Google Drive) and a structured knowledge graph ontology. It employs a 7-Layer Architecture to maintain a single source of truth, enforce declarative access control, and provide a visually generative UI interface.
 
 ## 7-Layer Architecture
 

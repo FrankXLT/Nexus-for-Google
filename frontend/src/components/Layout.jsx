@@ -24,7 +24,7 @@ const Layout = ({ children }) => {
             <aside className="w-64 bg-bgSurface border-r border-gray-800 flex flex-col">
                 <div className="p-4 flex items-center gap-3 border-b border-gray-800 cursor-pointer" onClick={() => navigate('/')}>
                     <Icon name="google-gemini-logo" className="w-8 h-8" />
-                    <span className="font-bold text-textPrimary text-xl tracking-tight">Nexus V3</span>
+                    <span className="font-bold text-textPrimary text-xl tracking-tight">Nexus</span>
                 </div>
                 <nav className="flex-1 p-4 space-y-2 flex flex-col">
                     <div onClick={() => navigate('/')} className="flex items-center gap-3 p-3 rounded hover:bg-gray-800 text-textPrimary cursor-pointer transition-colors font-medium">

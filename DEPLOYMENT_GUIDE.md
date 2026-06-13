@@ -1,6 +1,6 @@
-# Nexus V3: The Beginner's Deployment Playbook
+# Nexus for Google: The Beginner's Deployment Playbook
 
-Welcome to Nexus V3! Because this system operates as a private, secure, Asynchronous Closed-Loop Fusion Engine, you are going to host it on your own Google Cloud server. 
+Welcome to Nexus for Google! Because this system operates as a private, secure, Asynchronous Closed-Loop Fusion Engine, you are going to host it on your own Google Cloud server. 
 
 You do not need to be a DevOps engineer or coding expert to deploy this. The `nexus.sh` script does 95% of the heavy lifting. However, before you run the script, you must gather a few configuration keys. 
 
@@ -100,4 +100,4 @@ The server is now running, but it doesn't have permission to read your emails ye
 * Return to your terminal. The script will automatically save the connection token and restart your Nexus server!
 
 ### You are done! 🎉
-Navigate to your domain (`https://nexus.yourdomain.com`). Log in with Google, open the **System Settings** menu (gear icon), and click **Generate & Apply Theme** to bring Nexus V3 to life.
+Navigate to your domain (`https://nexus.yourdomain.com`). Log in with Google, open the **System Settings** menu (gear icon), and click **Generate & Apply Theme** to bring Nexus for Google to life.to life.

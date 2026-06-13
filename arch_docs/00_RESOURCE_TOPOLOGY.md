@@ -1,7 +1,7 @@
 # Layer 0: Resource Topology & Infrastructure
 
 ## 0.1 Day Zero Architecture: The Single-Node Monolith
-To ensure rapid development, operational simplicity, and immediate MVP deployment, Nexus V3 operates entirely within a single, highly optimized Virtual Machine.
+To ensure rapid development, operational simplicity, and immediate MVP deployment, Nexus operates entirely within a single, highly optimized Virtual Machine.
 
 While the logical architecture (CQRS databases and isolated worker loops) is designed to be easily split across a mesh network in the future, co-locating them on Day 0 ensures zero network latency for SQLite filesystem locks and simplifies the DevOps pipeline.
 

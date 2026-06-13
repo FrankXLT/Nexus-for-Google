@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.0] - 2026-06-10
 ### Added
-- Nexus V3 Asynchronous Closed-Loop Fusion Engine.
+- Nexus for Google Asynchronous Closed-Loop Fusion Engine.
 - 7-Layer Architecture implementation.
 - GCP Pub/Sub Integration for Webhooks.
 - Document AI and OCR worker integration.

@@ -1,7 +1,7 @@
 # Layer 4: Cognitive AI & LLM Routing
 
 ## 4.1 Tiered LLM Philosophy (Cost & Speed Optimization)
-Nexus V3 protects API budgets by deploying Tiered LLM routing. The system matches the token cost and latency to the cognitive complexity of the task.
+Nexus protects API budgets by deploying Tiered LLM routing. The system matches the token cost and latency to the cognitive complexity of the task.
 - **Fast-Pass Triage (`gemini-2.5-flash-8b`):** Used for micro-evaluations (e.g., matching text against a known array of purposes).
 - **Data Extraction (`gemini-2.5-flash`):** Used for standard JSON key-value extraction during the RAG phase.
 - **Heavy Evaluation (`gemini-2.5-pro`):** Used strictly for novel taxonomy generation, complex deductive reasoning, and UI theme generation.
