@@ -4,6 +4,7 @@
 set -e
 set -o pipefail
 export CLOUDSDK_COMPUTE_USE_OPENSSH=1
+export CLOUDSDK_CORE_DISABLE_PROMPTS=1 # Prevents gcloud from hanging on invisible Yes/No prompts
 
 # Color Codes
 GREEN='\033[0;32m'
@@ -38,7 +39,8 @@ provision() {
     echo -e "\n${CYAN}[1/6] Authentication & Project Setup...${NC}"
     ACTIVE_ACCOUNT=$(gcloud auth list --filter=status:ACTIVE --format="value(account)")
     if [ -z "$ACTIVE_ACCOUNT" ]; then
-        gcloud auth login
+        # Temporarily enable prompts so the user can login through the browser
+        CLOUDSDK_CORE_DISABLE_PROMPTS=0 gcloud auth login
     fi
 
     IFS=$'\n' read -r -d '' -a projects < <( gcloud projects list --format="value(projectId,name)" && printf '\0' )
@@ -53,22 +55,30 @@ provision() {
     INSTANCE_NAME="nexus-v3-$ENV_LABEL"
 
     echo -e "\n${CYAN}[2/6] Enabling APIs...${NC}"
+    # Added --quiet to prevent hidden Yes/No prompts
     gcloud services enable gmail.googleapis.com drive.googleapis.com pubsub.googleapis.com \
-        documentai.googleapis.com compute.googleapis.com --project="$PROJECT_ID"
+        documentai.googleapis.com compute.googleapis.com --project="$PROJECT_ID" --quiet
+    
+    echo -e "${YELLOW}Waiting 15 seconds for Google IAM to provision backend service accounts...${NC}"
+    sleep 15
 
     echo -e "\n${CYAN}[3/6] Configuring Network Security...${NC}"
-    if gcloud compute firewall-rules describe allow-http-https-nexus &> /dev/null; then
+    # Use list filter to prevent describe from deadlocking Git Bash
+    FW_EXISTS=$(gcloud compute firewall-rules list --filter="name=allow-http-https-nexus" --format="value(name)" --project="$PROJECT_ID" 2>/dev/null | tr -d '\r' || true)
+    
+    if [ "$FW_EXISTS" == "allow-http-https-nexus" ]; then
         echo -e "${GREEN}Firewall rule 'allow-http-https-nexus' exists.${NC}"
     else
+        echo "Creating firewall rule..."
         gcloud compute firewall-rules create allow-http-https-nexus \
             --action=ALLOW --rules=tcp:80,tcp:443,tcp:22 --source-ranges=0.0.0.0/0 \
-            --target-tags=http-server,https-server --project="$PROJECT_ID"
+            --target-tags=http-server,https-server --project="$PROJECT_ID" --quiet
     fi
 
     echo -e "\n${CYAN}[4/6] Injecting Environment Secrets...${NC}"
     
     # Prompt for credentials.json early so we can parse the Client ID
-    read -p "Enter local path to your credentials.json file: " CREDS_PATH
+    read -p "Enter local path to your credentials.json file (e.g. ./credentials.json): " CREDS_PATH
     if [ -n "$CREDS_PATH" ] && [ -f "$CREDS_PATH" ]; then
         GOOGLE_CLIENT_ID=$(grep -o '"client_id":"[^"]*"' "$CREDS_PATH" | head -n 1 | cut -d'"' -f4)
         echo -e "${GREEN}Auto-extracted Google Client ID: $GOOGLE_CLIENT_ID${NC}"
@@ -97,13 +107,22 @@ CLOUDFLARE_API_TOKEN=$CLOUDFLARE_API_TOKEN
 EOF
 
     echo -e "\n${CYAN}[5/6] Provisioning the Virtual Machine...${NC}"
-    gcloud compute instances create "$INSTANCE_NAME" \
-        --project="$PROJECT_ID" --zone="$ZONE" --machine-type=e2-micro \
-        --image-family=debian-12 --image-project=debian-cloud \
-        --boot-disk-size=30GB --boot-disk-type=pd-standard \
-        --tags=http-server,https-server \
-        --scopes=https://www.googleapis.com/auth/cloud-platform \
-        --metadata=startup-script='#!/bin/bash
+    
+    # Idempotent VM Check - Won't crash if re-run
+    VM_EXISTS=$(gcloud compute instances list --filter="name=$INSTANCE_NAME AND zone=$ZONE" --format="value(name)" --project="$PROJECT_ID" 2>/dev/null | tr -d '\r' || true)
+    
+    if [ "$VM_EXISTS" == "$INSTANCE_NAME" ]; then
+        echo -e "${GREEN}Virtual Machine '$INSTANCE_NAME' already exists. Skipping creation.${NC}"
+    else
+        echo "Creating new VM instance..."
+        gcloud compute instances create "$INSTANCE_NAME" \
+            --project="$PROJECT_ID" --zone="$ZONE" --machine-type=e2-micro \
+            --image-family=debian-12 --image-project=debian-cloud \
+            --boot-disk-size=30GB --boot-disk-type=pd-standard \
+            --tags=http-server,https-server \
+            --scopes=https://www.googleapis.com/auth/cloud-platform \
+            --quiet \
+            --metadata=startup-script='#!/bin/bash
 echo ">>> Starting Nexus Bootstrap..."
 apt-get update
 apt-get install -y python3 python3-pip python3-venv sqlite3 git curl nodejs npm
@@ -126,11 +145,12 @@ echo "/swapfile none swap sw 0 0" >> /etc/fstab
 mkdir -p /opt/nexus/shared/data /opt/nexus/shared/logs /opt/nexus/shared/tmp /opt/nexus/releases /opt/nexus/shared/backups
 chown -R '"$USER:$USER"' /opt/nexus
 '
+        echo -e "${YELLOW}Waiting 45 seconds for VM and packages to initialize...${NC}"
+        sleep 45
+    fi
     
-    echo -e "${YELLOW}Waiting 45 seconds for VM and packages to initialize...${NC}"
-    sleep 45
-
-    gcloud compute ssh "$INSTANCE_NAME" --zone="$ZONE" --command="
+    # Use cat with heredoc to avoid string interpolation issues over SSH
+    gcloud compute ssh "$INSTANCE_NAME" --zone="$ZONE" --project="$PROJECT_ID" --quiet --command="
         cat <<EOF > /opt/nexus/shared/.env
 NEXUS_HMAC_SECRET='$NEXUS_HMAC_SECRET'
 NEXUS_API_KEY='$NEXUS_API_KEY'
@@ -145,16 +165,16 @@ EOF
     "
 
     # Push credentials securely to the server
-    gcloud compute scp "$CREDS_PATH" "$INSTANCE_NAME:/opt/nexus/shared/credentials.json" --zone="$ZONE"
+    gcloud compute scp "$CREDS_PATH" "$INSTANCE_NAME:/opt/nexus/shared/credentials.json" --zone="$ZONE" --project="$PROJECT_ID" --quiet
 
     echo -e "\n${CYAN}[6/6] Provisioning Pub/Sub...${NC}"
-    gcloud pubsub topics create nexus-incoming-topic --project="$PROJECT_ID" || true
+    gcloud pubsub topics create nexus-incoming-topic --project="$PROJECT_ID" --quiet || true
     gcloud pubsub subscriptions create nexus-incoming-sub --topic=nexus-incoming-topic \
-        --push-endpoint="https://$NEXUS_PUBLIC_DOMAIN/webhook/gmail" --project="$PROJECT_ID" || \
+        --push-endpoint="https://$NEXUS_PUBLIC_DOMAIN/webhook/gmail" --project="$PROJECT_ID" --quiet || \
     gcloud pubsub subscriptions modify-push-config nexus-incoming-sub \
-        --push-endpoint="https://$NEXUS_PUBLIC_DOMAIN/webhook/gmail" --project="$PROJECT_ID"
+        --push-endpoint="https://$NEXUS_PUBLIC_DOMAIN/webhook/gmail" --project="$PROJECT_ID" --quiet
 
-    VM_IP=$(gcloud compute instances describe "$INSTANCE_NAME" --zone="$ZONE" --format="get(networkInterfaces[0].accessConfigs[0].natIP)")
+    VM_IP=$(gcloud compute instances describe "$INSTANCE_NAME" --zone="$ZONE" --project="$PROJECT_ID" --format="get(networkInterfaces[0].accessConfigs[0].natIP)" --quiet)
     
     echo -e "\n${GREEN}====================================================${NC}"
     echo -e "${GREEN}Provisioning Complete!${NC}"
@@ -199,7 +219,7 @@ deploy() {
     read -p "Backup remote SQLite databases before deploying? (Y/n): " doBackup
     if [[ ! "$doBackup" =~ ^[Nn]$ ]]; then
         echo "Creating backup on remote server..."
-        gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --command="
+        gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --quiet --command="
             mkdir -p /opt/nexus/shared/backups
             TIMESTAMP=\$(date +%Y%m%d_%H%M%S)
             cp /opt/nexus/shared/data/*.db /opt/nexus/shared/backups/ 2>/dev/null || echo 'No databases found to backup yet.'
@@ -212,11 +232,11 @@ deploy() {
     tar -czf /tmp/nexus_release.tar.gz --exclude='.git' --exclude='node_modules' --exclude='frontend/node_modules' --exclude='.env' --exclude='credentials.json' --exclude='token.json' --exclude='AUDITS' .
     
     echo "Pushing package to VM..."
-    gcloud compute scp /tmp/nexus_release.tar.gz "$TARGET_VM:/tmp/nexus_release.tar.gz" --zone="$TARGET_ZONE"
+    gcloud compute scp /tmp/nexus_release.tar.gz "$TARGET_VM:/tmp/nexus_release.tar.gz" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --quiet
     
     echo -e "\n${YELLOW}--- 4. Remote Build & Hot-Swap ---${NC}"
     echo "Executing remote build process..."
-    gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --command="
+    gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --quiet --command="
         set -e
         RELEASE_DIR=/opt/nexus/releases/\$(date +%Y%m%d_%H%M%S)
         mkdir -p \$RELEASE_DIR
@@ -309,13 +329,13 @@ auth_tunnel() {
     
     AUTH_CMD="sudo systemctl stop nexus.service; export NEXUS_SHARED_DIR=/opt/nexus/shared; cd /opt/nexus/current && source venv/bin/activate && pip install google-auth-oauthlib google-api-python-client --quiet && python backend/auth/workspace_auth.py; sudo systemctl start nexus.service"
     
-    gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --ssh-flag="-L" --ssh-flag="8080:127.0.0.1:8080" --command="$AUTH_CMD"
+    gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --ssh-flag="-L" --ssh-flag="8080:127.0.0.1:8080" --quiet --command="$AUTH_CMD"
 }
 
 health() {
     load_env
     echo -e "\n${CYAN}Fetching Health Status for $TARGET_VM...${NC}"
-    gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --command="
+    gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --quiet --command="
         echo -e '\n--- Systemd Service ---'
         sudo systemctl status nexus.service --no-pager | head -n 5
         echo -e '\n--- Caddy Proxy Status ---'
@@ -332,7 +352,7 @@ health() {
 clean() {
     load_env
     echo -e "\n${YELLOW}Cleaning old releases and running SQLite VACUUM...${NC}"
-    gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --command="
+    gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --quiet --command="
         current_rel=\$(readlink -f \"/opt/nexus/current\")
         ls -d /opt/nexus/releases/*/ 2>/dev/null | grep -v \"\$current_rel\" | xargs -I {} sudo rm -rf {}
         sqlite3 /opt/nexus/shared/data/nexus_core.db 'VACUUM;'
