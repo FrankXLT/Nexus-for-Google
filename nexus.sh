@@ -14,7 +14,7 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 echo -e "${CYAN}====================================================${NC}"
-echo -e "${CYAN}      NEXUS: MASTER CONTROL & DEPLOYMENT         ${NC}"
+echo -e "${CYAN}      NEXUS: MASTER CONTROL & DEPLOYMENT            ${NC}"
 echo -e "${CYAN}====================================================${NC}"
 
 # Ensure gcloud is installed
@@ -36,7 +36,7 @@ load_env() {
 }
 
 provision() {
-    echo -e "\n${CYAN}[1/6] Authentication & Project Setup...${NC}"
+    echo -e "\n${CYAN}[1/7] Authentication & Project Setup...${NC}"
     ACTIVE_ACCOUNT=$(gcloud auth list --filter=status:ACTIVE --format="value(account)")
     if [ -z "$ACTIVE_ACCOUNT" ]; then
         CLOUDSDK_CORE_DISABLE_PROMPTS=0 gcloud auth login
@@ -53,11 +53,11 @@ provision() {
     ENV_LABEL=${ENV_LABEL:-prod}
     INSTANCE_NAME="nexus-$ENV_LABEL"
 
-    echo -e "\n${CYAN}[2/6] Enabling APIs...${NC}"
+    echo -e "\n${CYAN}[2/7] Enabling APIs...${NC}"
     gcloud services enable gmail.googleapis.com drive.googleapis.com pubsub.googleapis.com \
         documentai.googleapis.com compute.googleapis.com --project="$PROJECT_ID" --quiet
 
-    echo -e "\n${CYAN}[3/6] Configuring Network Security...${NC}"
+    echo -e "\n${CYAN}[3/7] Configuring Network Security...${NC}"
     FW_EXISTS=$(gcloud compute firewall-rules list --filter="name=allow-http-https-nexus" --format="value(name)" --project="$PROJECT_ID" 2>/dev/null | tr -d '\r' || true)
     
     if [ "$FW_EXISTS" == "allow-http-https-nexus" ]; then
@@ -69,7 +69,7 @@ provision() {
             --target-tags=http-server,https-server --project="$PROJECT_ID" --quiet
     fi
 
-    echo -e "\n${CYAN}[4/6] Injecting Environment Secrets...${NC}"
+    echo -e "\n${CYAN}[4/7] Injecting Environment Secrets...${NC}"
     
     # -r prevents bash from stripping backslashes. We then clean Windows paths and quotes!
     read -r -p "Enter local path to your credentials.json file (e.g. ./credentials.json): " RAW_CREDS_PATH
@@ -104,7 +104,7 @@ NEXUS_PUBLIC_DOMAIN=$NEXUS_PUBLIC_DOMAIN
 CLOUDFLARE_API_TOKEN=$CLOUDFLARE_API_TOKEN
 EOF
 
-    echo -e "\n${CYAN}[5/6] Provisioning the Virtual Machine...${NC}"
+    echo -e "\n${CYAN}[5/7] Provisioning the Virtual Machine...${NC}"
     VM_EXISTS=$(gcloud compute instances list --filter="name=$INSTANCE_NAME AND zone=$ZONE" --format="value(name)" --project="$PROJECT_ID" 2>/dev/null | tr -d '\r' || true)
     
     if [ "$VM_EXISTS" == "$INSTANCE_NAME" ]; then
@@ -166,7 +166,7 @@ EOF
     echo "Uploading credentials.json..."
     gcloud compute scp "$CREDS_PATH" "$INSTANCE_NAME:/opt/nexus/shared/credentials.json" --zone="$ZONE" --project="$PROJECT_ID" --quiet --strict-host-key-checking=no
 
-    echo -e "\n${CYAN}[6/6] Provisioning Pub/Sub...${NC}"
+    echo -e "\n${CYAN}[6/7] Provisioning Pub/Sub...${NC}"
     gcloud pubsub topics create nexus-incoming-topic --project="$PROJECT_ID" --quiet || true
     gcloud pubsub subscriptions create nexus-incoming-sub --topic=nexus-incoming-topic \
         --push-endpoint="https://$NEXUS_PUBLIC_DOMAIN/webhook/gmail" --project="$PROJECT_ID" --quiet || \
@@ -175,12 +175,56 @@ EOF
 
     VM_IP=$(gcloud compute instances describe "$INSTANCE_NAME" --zone="$ZONE" --project="$PROJECT_ID" --format="get(networkInterfaces[0].accessConfigs[0].natIP)" --quiet)
     
+    echo -e "\n${CYAN}[7/7] Auto-Configuring Cloudflare DNS...${NC}"
+    if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+        gcloud compute ssh "$INSTANCE_NAME" --zone="$ZONE" --project="$PROJECT_ID" --quiet --strict-host-key-checking=no --command="
+            python3 -c '
+import urllib.request, json, sys
+token = \"$CLOUDFLARE_API_TOKEN\"
+domain = \"$NEXUS_PUBLIC_DOMAIN\"
+ip = \"$VM_IP\"
+
+try:
+    req = urllib.request.Request(\"https://api.cloudflare.com/client/v4/zones\", headers={\"Authorization\": f\"Bearer {token}\"})
+    zones = json.loads(urllib.request.urlopen(req).read().decode(\"utf-8\"))[\"result\"]
+    zone_id = None
+    for z in zones:
+        if domain.endswith(z[\"name\"]):
+            zone_id = z[\"id\"]
+            break
+    
+    if not zone_id:
+        print(\"   -> Error: Could not find matching Cloudflare zone for\", domain)
+        sys.exit(0)
+    
+    req = urllib.request.Request(f\"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records?name={domain}&type=A\", headers={\"Authorization\": f\"Bearer {token}\"})
+    records = json.loads(urllib.request.urlopen(req).read().decode(\"utf-8\"))[\"result\"]
+    
+    data = json.dumps({\"type\": \"A\", \"name\": domain, \"content\": ip, \"proxied\": True, \"ttl\": 1}).encode(\"utf-8\")
+    headers = {\"Authorization\": f\"Bearer {token}\", \"Content-Type\": \"application/json\"}
+    
+    if records:
+        record_id = records[0][\"id\"]
+        req = urllib.request.Request(f\"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records/{record_id}\", data=data, headers=headers, method=\"PUT\")
+        print(\"   -> Updating existing A Record for\", domain)
+    else:
+        req = urllib.request.Request(f\"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records\", data=data, headers=headers, method=\"POST\")
+        print(\"   -> Creating new A Record for\", domain)
+        
+    urllib.request.urlopen(req)
+    print(f\"   -> Cloudflare DNS successfully pointed {domain} to {ip} (Proxied)!\")
+except Exception as e:
+    print(f\"   -> Failed to update Cloudflare DNS: {e}\")
+'
+        "
+    else
+        echo -e "${YELLOW}Skipped Cloudflare DNS Automation (No Token Provided).${NC}"
+    fi
+
     echo -e "\n${GREEN}====================================================${NC}"
     echo -e "${GREEN}Provisioning Complete!${NC}"
     echo -e "Your VM IP Address is: ${YELLOW}$VM_IP${NC}"
-    if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
-        echo -e "Ensure your Cloudflare DNS record points to ${YELLOW}$VM_IP${NC} (Orange Cloud Proxy is OK!)."
-    else
+    if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
         echo -e "ACTION REQUIRED: Go to your DNS provider and point ${YELLOW}$NEXUS_PUBLIC_DOMAIN${NC} to ${YELLOW}$VM_IP${NC}"
     fi
     echo -e "Once DNS propagates, run ${CYAN}./nexus.sh --deploy${NC} to push your code!"
@@ -361,7 +405,7 @@ clean() {
 
 show_menu() {
     echo -e "${CYAN}====================================================${NC}"
-    echo -e "${CYAN}       NEXUS MASTER CONTROL PANEL (LOCAL)        ${NC}"
+    echo -e "${CYAN}       NEXUS MASTER CONTROL PANEL (LOCAL)           ${NC}"
     echo -e "${CYAN}====================================================${NC}"
     echo "1. Provision Infrastructure (--provision)"
     echo "2. Deploy Source Code (--deploy)"
