@@ -77,13 +77,17 @@ provision() {
 
     echo -e "\n${CYAN}[4/6] Injecting Environment Secrets...${NC}"
     
-    # Prompt for credentials.json early so we can parse the Client ID
-    read -p "Enter local path to your credentials.json file (e.g. ./credentials.json): " CREDS_PATH
+    # Added -r to read raw input so Windows backslashes are not stripped!
+    read -r -p "Enter local path to your credentials.json file (e.g. ./credentials.json): " RAW_CREDS_PATH
+    
+    # Auto-convert Windows backslashes to Linux forward slashes for Git Bash
+    CREDS_PATH="${RAW_CREDS_PATH//\\//}"
+
     if [ -n "$CREDS_PATH" ] && [ -f "$CREDS_PATH" ]; then
         GOOGLE_CLIENT_ID=$(grep -o '"client_id":"[^"]*"' "$CREDS_PATH" | head -n 1 | cut -d'"' -f4)
         echo -e "${GREEN}Auto-extracted Google Client ID: $GOOGLE_CLIENT_ID${NC}"
     else
-        echo -e "${RED}Error: credentials.json is required.${NC}"
+        echo -e "${RED}Error: credentials.json is required. File not found at '$CREDS_PATH'.${NC}"
         exit 1
     fi
 
