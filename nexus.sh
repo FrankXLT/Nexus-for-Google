@@ -39,7 +39,6 @@ provision() {
     echo -e "\n${CYAN}[1/6] Authentication & Project Setup...${NC}"
     ACTIVE_ACCOUNT=$(gcloud auth list --filter=status:ACTIVE --format="value(account)")
     if [ -z "$ACTIVE_ACCOUNT" ]; then
-        # Temporarily enable prompts so the user can login through the browser
         CLOUDSDK_CORE_DISABLE_PROMPTS=0 gcloud auth login
     fi
 
@@ -55,15 +54,10 @@ provision() {
     INSTANCE_NAME="nexus-v3-$ENV_LABEL"
 
     echo -e "\n${CYAN}[2/6] Enabling APIs...${NC}"
-    # Added --quiet to prevent hidden Yes/No prompts
     gcloud services enable gmail.googleapis.com drive.googleapis.com pubsub.googleapis.com \
         documentai.googleapis.com compute.googleapis.com --project="$PROJECT_ID" --quiet
-    
-    echo -e "${YELLOW}Waiting 15 seconds for Google IAM to provision backend service accounts...${NC}"
-    sleep 15
 
     echo -e "\n${CYAN}[3/6] Configuring Network Security...${NC}"
-    # Use list filter to prevent describe from deadlocking Git Bash
     FW_EXISTS=$(gcloud compute firewall-rules list --filter="name=allow-http-https-nexus" --format="value(name)" --project="$PROJECT_ID" 2>/dev/null | tr -d '\r' || true)
     
     if [ "$FW_EXISTS" == "allow-http-https-nexus" ]; then
@@ -77,11 +71,11 @@ provision() {
 
     echo -e "\n${CYAN}[4/6] Injecting Environment Secrets...${NC}"
     
-    # Added -r to read raw input so Windows backslashes are not stripped!
+    # -r prevents bash from stripping backslashes. We then clean Windows paths and quotes!
     read -r -p "Enter local path to your credentials.json file (e.g. ./credentials.json): " RAW_CREDS_PATH
-    
-    # Auto-convert Windows backslashes to Linux forward slashes for Git Bash
     CREDS_PATH="${RAW_CREDS_PATH//\\//}"
+    CREDS_PATH="${CREDS_PATH//\'/}"
+    CREDS_PATH="${CREDS_PATH//\"/}"
 
     if [ -n "$CREDS_PATH" ] && [ -f "$CREDS_PATH" ]; then
         GOOGLE_CLIENT_ID=$(grep -o '"client_id":"[^"]*"' "$CREDS_PATH" | head -n 1 | cut -d'"' -f4)
@@ -111,8 +105,6 @@ CLOUDFLARE_API_TOKEN=$CLOUDFLARE_API_TOKEN
 EOF
 
     echo -e "\n${CYAN}[5/6] Provisioning the Virtual Machine...${NC}"
-    
-    # Idempotent VM Check - Won't crash if re-run
     VM_EXISTS=$(gcloud compute instances list --filter="name=$INSTANCE_NAME AND zone=$ZONE" --format="value(name)" --project="$PROJECT_ID" 2>/dev/null | tr -d '\r' || true)
     
     if [ "$VM_EXISTS" == "$INSTANCE_NAME" ]; then
@@ -145,16 +137,19 @@ chmod 600 /swapfile
 mkswap /swapfile
 swapon /swapfile
 echo "/swapfile none swap sw 0 0" >> /etc/fstab
-
-mkdir -p /opt/nexus/shared/data /opt/nexus/shared/logs /opt/nexus/shared/tmp /opt/nexus/releases /opt/nexus/shared/backups
-chown -R '"$USER:$USER"' /opt/nexus
 '
-        echo -e "${YELLOW}Waiting 45 seconds for VM and packages to initialize...${NC}"
+        echo -e "${YELLOW}Waiting 45 seconds for VM to boot...${NC}"
         sleep 45
     fi
     
-    # Use cat with heredoc to avoid string interpolation issues over SSH
-    gcloud compute ssh "$INSTANCE_NAME" --zone="$ZONE" --project="$PROJECT_ID" --quiet --command="
+    echo -e "${CYAN}Creating remote directory structure...${NC}"
+    gcloud compute ssh "$INSTANCE_NAME" --zone="$ZONE" --project="$PROJECT_ID" --quiet --strict-host-key-checking=no --command="
+        sudo mkdir -p /opt/nexus/shared/data /opt/nexus/shared/logs /opt/nexus/shared/tmp /opt/nexus/releases /opt/nexus/shared/backups
+        sudo chown -R \$USER:\$USER /opt/nexus
+    "
+
+    echo "Injecting .env file to remote server..."
+    gcloud compute ssh "$INSTANCE_NAME" --zone="$ZONE" --project="$PROJECT_ID" --quiet --strict-host-key-checking=no --command="
         cat <<EOF > /opt/nexus/shared/.env
 NEXUS_HMAC_SECRET='$NEXUS_HMAC_SECRET'
 NEXUS_API_KEY='$NEXUS_API_KEY'
@@ -168,8 +163,8 @@ DOCAI_PROCESSOR_ID='$DOCAI_PROCESSOR_ID'
 EOF
     "
 
-    # Push credentials securely to the server
-    gcloud compute scp "$CREDS_PATH" "$INSTANCE_NAME:/opt/nexus/shared/credentials.json" --zone="$ZONE" --project="$PROJECT_ID" --quiet
+    echo "Uploading credentials.json..."
+    gcloud compute scp "$CREDS_PATH" "$INSTANCE_NAME:/opt/nexus/shared/credentials.json" --zone="$ZONE" --project="$PROJECT_ID" --quiet --strict-host-key-checking=no
 
     echo -e "\n${CYAN}[6/6] Provisioning Pub/Sub...${NC}"
     gcloud pubsub topics create nexus-incoming-topic --project="$PROJECT_ID" --quiet || true
@@ -199,7 +194,6 @@ deploy() {
     echo "Fetching git branches..."
     git fetch origin || true
     
-    # Safely fetch remote branches into an array
     IFS=$'\n' read -r -d '' -a branches < <( git branch -r | grep "origin/" | grep -v "HEAD" | sed 's/^[ \t]*origin\///' && printf '\0' )
     if [ ${#branches[@]} -eq 0 ]; then
         echo -e "${YELLOW}No remote branches found. Proceeding with current local state.${NC}"
@@ -223,7 +217,7 @@ deploy() {
     read -p "Backup remote SQLite databases before deploying? (Y/n): " doBackup
     if [[ ! "$doBackup" =~ ^[Nn]$ ]]; then
         echo "Creating backup on remote server..."
-        gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --quiet --command="
+        gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --quiet --strict-host-key-checking=no --command="
             mkdir -p /opt/nexus/shared/backups
             TIMESTAMP=\$(date +%Y%m%d_%H%M%S)
             cp /opt/nexus/shared/data/*.db /opt/nexus/shared/backups/ 2>/dev/null || echo 'No databases found to backup yet.'
@@ -233,14 +227,14 @@ deploy() {
 
     echo -e "\n${YELLOW}--- 3. Packaging & Uploading ---${NC}"
     echo "Packaging local repository (excluding node_modules/ignored files)..."
-    tar -czf /tmp/nexus_release.tar.gz --exclude='.git' --exclude='node_modules' --exclude='frontend/node_modules' --exclude='.env' --exclude='credentials.json' --exclude='token.json' --exclude='AUDITS' .
+    tar -czf /tmp/nexus_release.tar.gz --exclude='.git' --exclude='node_modules' --exclude='frontend/node_modules' --exclude='venv' --exclude='.env' --exclude='credentials.json' --exclude='token.json' --exclude='AUDITS' .
     
     echo "Pushing package to VM..."
-    gcloud compute scp /tmp/nexus_release.tar.gz "$TARGET_VM:/tmp/nexus_release.tar.gz" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --quiet
+    gcloud compute scp /tmp/nexus_release.tar.gz "$TARGET_VM:/tmp/nexus_release.tar.gz" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --quiet --strict-host-key-checking=no
     
     echo -e "\n${YELLOW}--- 4. Remote Build & Hot-Swap ---${NC}"
     echo "Executing remote build process..."
-    gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --quiet --command="
+    gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --quiet --strict-host-key-checking=no --command="
         set -e
         RELEASE_DIR=/opt/nexus/releases/\$(date +%Y%m%d_%H%M%S)
         mkdir -p \$RELEASE_DIR
@@ -322,7 +316,7 @@ EOF\"
         sudo systemctl restart nexus.service
         echo '-> Deployment Complete!'
     "
-    rm /tmp/nexus_release.tar.gz
+    rm -f /tmp/nexus_release.tar.gz
     echo -e "${GREEN}System is LIVE at https://$NEXUS_PUBLIC_DOMAIN${NC}"
 }
 
@@ -333,13 +327,13 @@ auth_tunnel() {
     
     AUTH_CMD="sudo systemctl stop nexus.service; export NEXUS_SHARED_DIR=/opt/nexus/shared; cd /opt/nexus/current && source venv/bin/activate && pip install google-auth-oauthlib google-api-python-client --quiet && python backend/auth/workspace_auth.py; sudo systemctl start nexus.service"
     
-    gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --ssh-flag="-L" --ssh-flag="8080:127.0.0.1:8080" --quiet --command="$AUTH_CMD"
+    gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --ssh-flag="-L" --ssh-flag="8080:127.0.0.1:8080" --quiet --strict-host-key-checking=no --command="$AUTH_CMD"
 }
 
 health() {
     load_env
     echo -e "\n${CYAN}Fetching Health Status for $TARGET_VM...${NC}"
-    gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --quiet --command="
+    gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --quiet --strict-host-key-checking=no --command="
         echo -e '\n--- Systemd Service ---'
         sudo systemctl status nexus.service --no-pager | head -n 5
         echo -e '\n--- Caddy Proxy Status ---'
@@ -356,7 +350,7 @@ health() {
 clean() {
     load_env
     echo -e "\n${YELLOW}Cleaning old releases and running SQLite VACUUM...${NC}"
-    gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --quiet --command="
+    gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --quiet --strict-host-key-checking=no --command="
         current_rel=\$(readlink -f \"/opt/nexus/current\")
         ls -d /opt/nexus/releases/*/ 2>/dev/null | grep -v \"\$current_rel\" | xargs -I {} sudo rm -rf {}
         sqlite3 /opt/nexus/shared/data/nexus_core.db 'VACUUM;'

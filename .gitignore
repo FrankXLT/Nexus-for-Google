@@ -1,3 +1,5 @@
 /AUDITS/
 scripts/
 .env
+.nexus_env
+credentials.json
