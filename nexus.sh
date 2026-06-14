@@ -1,13 +1,13 @@
 #!/bin/bash
-# nexus.sh - Local Workstation DevSecOps CLI for Nexus
+# nexus.sh - Standalone DevSecOps Installer for Nexus
 
 set -e
 set -o pipefail
 export CLOUDSDK_COMPUTE_USE_OPENSSH=1
 export CLOUDSDK_CORE_DISABLE_PROMPTS=1 # Prevents gcloud from hanging on invisible Yes/No prompts
 
-# Auto-navigate to script directory to ensure git commands work
-cd "$(dirname "${BASH_SOURCE[0]}")"
+# Auto-navigate to script directory so it can be run from anywhere
+cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null || true
 
 # Color Codes
 GREEN='\033[0;32m'
@@ -238,24 +238,30 @@ deploy() {
     echo -e "\n${CYAN}Starting Zero-Downtime Deployment to $TARGET_VM...${NC}"
     
     echo -e "\n${YELLOW}--- 1. GitHub Branch Selection ---${NC}"
-    echo "Fetching remote branches directly from GitHub..."
-    REPO_URL="https://github.com/FrankXLT/Nexus-for-Google.git"
+    REPO="FrankXLT/Nexus-for-Google"
     
-    # Use git ls-remote to query GitHub directly, bypassing local git state
-    IFS=$'\n' read -r -d '' -a branches < <( git ls-remote --heads "$REPO_URL" 2>/dev/null | awk '{print $2}' | sed 's|^refs/heads/||' && printf '\0' )
-    
-    if [ ${#branches[@]} -eq 0 ]; then
-        echo -e "${RED}Error: Could not fetch branches from $REPO_URL.${NC}"
-        exit 1
+    # Graceful degradation: Try git -> try curl -> fallback to main
+    branches=()
+    if command -v git &> /dev/null; then
+        echo "Fetching remote branches from GitHub (using git)..."
+        IFS=$'\n' read -r -d '' -a branches < <( git ls-remote --heads "https://github.com/$REPO.git" 2>/dev/null | awk '{print $2}' | sed 's|^refs/heads/||' && printf '\0' )
+    elif command -v curl &> /dev/null; then
+        echo "Fetching remote branches via GitHub API..."
+        IFS=$'\n' read -r -d '' -a branches < <( curl -s "https://api.github.com/repos/$REPO/branches" 2>/dev/null | grep '"name":' | cut -d'"' -f4 && printf '\0' )
     fi
     
-    for i in "${!branches[@]}"; do
-        echo "[$i] ${branches[$i]}"
-    done
-    echo ""
-    read -p "Select branch number to deploy [0]: " bIdx
-    bIdx=${bIdx:-0}
-    SELECTED_BRANCH="${branches[$bIdx]}"
+    if [ ${#branches[@]} -eq 0 ]; then
+        echo -e "${YELLOW}Notice: Could not fetch branches automatically. Defaulting to 'main'.${NC}"
+        SELECTED_BRANCH="main"
+    else
+        for i in "${!branches[@]}"; do
+            echo "[$i] ${branches[$i]}"
+        done
+        echo ""
+        read -p "Select branch number to deploy [0]: " bIdx
+        bIdx=${bIdx:-0}
+        SELECTED_BRANCH="${branches[$bIdx]}"
+    fi
     echo -e "${GREEN}Targeting remote branch: $SELECTED_BRANCH${NC}"
     
     echo -e "\n${YELLOW}--- 2. Database Backup ---${NC}"
@@ -271,14 +277,14 @@ deploy() {
     fi
 
     echo -e "\n${YELLOW}--- 3. Remote Build & Hot-Swap ---${NC}"
-    echo "Commanding VM to clone from GitHub and build..."
+    echo "Commanding VM to download code directly from GitHub and build..."
     gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --quiet --strict-host-key-checking=no --command="
         set -e
         RELEASE_DIR=/opt/nexus/releases/\$(date +%Y%m%d_%H%M%S)
         mkdir -p \$RELEASE_DIR
         
-        echo '-> Cloning repository from GitHub...'
-        git clone --branch \"$SELECTED_BRANCH\" \"$REPO_URL\" \$RELEASE_DIR
+        echo '-> Downloading repository archive from GitHub...'
+        curl -sL \"https://github.com/$REPO/archive/refs/heads/$SELECTED_BRANCH.tar.gz\" | tar -xz -C \$RELEASE_DIR --strip-components=1
         
         source /opt/nexus/shared/.env
         
