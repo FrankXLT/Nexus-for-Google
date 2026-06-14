@@ -34,4 +34,3 @@ class BaseWorker:
         - None
         """
         raise NotImplementedError("Subclasses must implement process()")
-entedError("Subclasses must implement process()")

@@ -86,5 +86,3 @@ async def generate_theme(user: str = Depends(get_current_user)):
         return {"status": "success", "colors_applied": len(theme_data.category_colors) + len(theme_data.purpose_colors)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Theme generation failed: {str(e)}")
-tion failed: {str(e)}")
-=500, detail=f"Theme generation failed: {str(e)}")

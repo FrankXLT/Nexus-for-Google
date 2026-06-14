@@ -218,5 +218,4 @@ async def main():
     await seed_database()
 
 if __name__ == "__main__":
-    asyncio.run(main())ame__ == "__main__":
     asyncio.run(main())

@@ -80,4 +80,3 @@ async def auth_status(request: Request):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
-401_UNAUTHORIZED, detail="Invalid session")
