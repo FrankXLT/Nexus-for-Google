@@ -74,7 +74,6 @@ provision() {
 
     echo -e "\n${CYAN}[4/7] Injecting Environment Secrets...${NC}"
     
-    # -r prevents bash from stripping backslashes. We then clean Windows paths and quotes!
     read -r -p "Enter local path to your credentials.json file (e.g. ./credentials.json): " RAW_CREDS_PATH
     CREDS_PATH="${RAW_CREDS_PATH//\\//}"
     CREDS_PATH="${CREDS_PATH//\'/}"
@@ -133,12 +132,15 @@ apt-get install -y nodejs
 
 curl -1sLf "https://dl.cloudsmith.io/public/caddy/stable/gpg.key" | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 curl -1sLf "https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt" | tee /etc/apt/sources.list.d/caddy-stable.list
-apt-get update && apt-get install -y caddy
+apt-get update && apt-get install -y caddy libcap2-bin
 
 echo ">>> Injecting Cloudflare Caddy Module..."
+systemctl stop caddy || true
+rm -f /usr/bin/caddy
 curl -1sLf -o /usr/bin/caddy "https://caddyserver.com/api/download?os=linux&arch=amd64&p=github.com%2Fcaddy-dns%2Fcloudflare"
 chmod +x /usr/bin/caddy
-systemctl restart caddy
+setcap cap_net_bind_service=+ep /usr/bin/caddy || true
+systemctl start caddy
 
 echo ">>> Configuring 2GB Swap Space..."
 fallocate -l 2G /swapfile
@@ -296,6 +298,15 @@ deploy() {
             hash -r
         fi
 
+        echo '-> Verifying Caddy Cloudflare Module...'
+        if ! /usr/bin/caddy list-modules | grep -q dns.providers.cloudflare; then
+            echo '-> Auto-healing: Patching Caddy with Cloudflare plugin...'
+            sudo systemctl stop caddy || true
+            sudo rm -f /usr/bin/caddy
+            sudo curl -1sLf -o /usr/bin/caddy \"https://caddyserver.com/api/download?os=linux&arch=amd64&p=github.com%2Fcaddy-dns%2Fcloudflare\"
+            sudo chmod +x /usr/bin/caddy
+        fi
+
         RELEASE_DIR=/opt/nexus/releases/\$(date +%Y%m%d_%H%M%S)
         mkdir -p \$RELEASE_DIR
         
@@ -322,29 +333,51 @@ deploy() {
         export NEXUS_SHARED_DIR=/opt/nexus/shared
         python backend/db_init.py
         
-        echo '-> Updating Symlinks'
+        echo '-> Updating Symlinks and Permissions'
         ln -sfn \$RELEASE_DIR /opt/nexus/current
+        sudo chmod 755 /opt/nexus
+        sudo chmod 755 /opt/nexus/releases
+        sudo chmod 755 \$RELEASE_DIR
         
         echo '-> Configuring Caddy & Systemd'
-        source /opt/nexus/shared/.env
-        
+        # Strip invisible Windows carriage returns to prevent parsing crashes
+        NEXUS_PUBLIC_DOMAIN=\$(echo \"\$NEXUS_PUBLIC_DOMAIN\" | tr -d '\r')
+        CLOUDFLARE_API_TOKEN=\$(echo \"\$CLOUDFLARE_API_TOKEN\" | tr -d '\r')
+
         TLS_BLOCK=\"\"
         if [ -n \"\$CLOUDFLARE_API_TOKEN\" ]; then
-            TLS_BLOCK=\"tls { dns cloudflare \$CLOUDFLARE_API_TOKEN }\"
+            TLS_BLOCK=\"tls {
+        dns cloudflare \$CLOUDFLARE_API_TOKEN
+    }\"
         fi
 
-        sudo bash -c \"cat > /etc/caddy/Caddyfile <<EOF
+        # Write safely to /tmp first to avoid sudo subshell scoping drops
+        cat > /tmp/Caddyfile <<EOF
 \$NEXUS_PUBLIC_DOMAIN {
     \$TLS_BLOCK
     root * /opt/nexus/current/frontend/dist
     file_server
-    handle /api/* { reverse_proxy 127.0.0.1:8000 }
-    handle /webhook/* { reverse_proxy 127.0.0.1:8000 }
+    handle /api/* {
+        reverse_proxy 127.0.0.1:8000
+    }
+    handle /webhook/* {
+        reverse_proxy 127.0.0.1:8000
+    }
 }
-EOF\"
-        sudo systemctl reload caddy
+EOF
+        sudo mv /tmp/Caddyfile /etc/caddy/Caddyfile
+        
+        # Ensure Caddy can bind to secure ports
+        sudo setcap cap_net_bind_service=+ep /usr/bin/caddy || true
+        
+        # Format and validate
+        sudo caddy fmt --overwrite /etc/caddy/Caddyfile || true
+        sudo /usr/bin/caddy validate --config /etc/caddy/Caddyfile || echo 'WARNING: Caddy validation failed'
+        
+        # Use restart instead of reload
+        sudo systemctl restart caddy
 
-        sudo bash -c \"cat > /etc/systemd/system/nexus.service <<EOF
+        cat > /tmp/nexus.service <<EOF
 [Unit]
 Description=Nexus Daemon
 After=network.target
@@ -360,9 +393,10 @@ Restart=always
 
 [Install]
 WantedBy=multi-user.target
-EOF\"
+EOF
+        sudo mv /tmp/nexus.service /etc/systemd/system/nexus.service
         
-        sudo bash -c \"cat > /etc/logrotate.d/nexus <<EOF
+        cat > /tmp/nexus_logrotate <<EOF
 /opt/nexus/shared/logs/*.log {
     daily
     rotate 7
@@ -371,7 +405,8 @@ EOF\"
     missingok
     notifempty
 }
-EOF\"
+EOF
+        sudo mv /tmp/nexus_logrotate /etc/logrotate.d/nexus
 
         sudo systemctl daemon-reload
         sudo systemctl enable nexus.service
