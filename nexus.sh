@@ -125,6 +125,11 @@ EOF
 echo ">>> Starting Nexus Bootstrap..."
 apt-get update
 apt-get install -y python3 python3-pip python3-venv sqlite3 git curl nodejs npm
+
+echo ">>> Enforcing Node.js v22 LTS..."
+curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+apt-get install -y nodejs
+
 curl -1sLf "https://dl.cloudsmith.io/public/caddy/stable/gpg.key" | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 curl -1sLf "https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt" | tee /etc/apt/sources.list.d/caddy-stable.list
 apt-get update && apt-get install -y caddy
@@ -240,7 +245,6 @@ deploy() {
     echo -e "\n${YELLOW}--- 1. GitHub Branch Selection ---${NC}"
     REPO="FrankXLT/Nexus-for-Google"
     
-    # Graceful degradation: Try git -> try curl -> fallback to main
     branches=()
     if command -v git &> /dev/null; then
         echo "Fetching remote branches from GitHub (using git)..."
@@ -280,6 +284,15 @@ deploy() {
     echo "Commanding VM to download code directly from GitHub and build..."
     gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --quiet --strict-host-key-checking=no --command="
         set -e
+        
+        echo '-> Checking Node.js version...'
+        CURRENT_NODE=\$(node -v 2>/dev/null | cut -d'v' -f2 | cut -d'.' -f1 || echo '0')
+        if [ \"\$CURRENT_NODE\" -lt 22 ]; then
+            echo '-> Upgrading Node.js to v22 (LTS) to support Vite...'
+            curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - > /dev/null 2>&1
+            sudo apt-get install -y nodejs > /dev/null 2>&1
+        fi
+
         RELEASE_DIR=/opt/nexus/releases/\$(date +%Y%m%d_%H%M%S)
         mkdir -p \$RELEASE_DIR
         
