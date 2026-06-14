@@ -49,11 +49,4 @@ const App = () => {
     );
 };
 
-export default App;                 </Routes>
-                </Router>
-            </AuthProvider>
-        </ThemeProvider>
-    );
-};
-
 export default App;

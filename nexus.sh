@@ -127,6 +127,7 @@ apt-get update
 apt-get install -y python3 python3-pip python3-venv sqlite3 git curl nodejs npm
 
 echo ">>> Enforcing Node.js v22 LTS..."
+apt-get remove -y nodejs npm || true
 curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
 apt-get install -y nodejs
 
@@ -289,8 +290,10 @@ deploy() {
         CURRENT_NODE=\$(node -v 2>/dev/null | cut -d'v' -f2 | cut -d'.' -f1 || echo '0')
         if [ \"\$CURRENT_NODE\" -lt 22 ]; then
             echo '-> Upgrading Node.js to v22 (LTS) to support Vite...'
+            sudo apt-get remove -y nodejs npm > /dev/null 2>&1 || true
             curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - > /dev/null 2>&1
             sudo apt-get install -y nodejs > /dev/null 2>&1
+            hash -r
         fi
 
         RELEASE_DIR=/opt/nexus/releases/\$(date +%Y%m%d_%H%M%S)

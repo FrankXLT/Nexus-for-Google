@@ -118,4 +118,4 @@ const SystemSettingsModal = ({ onClose }) => {
     );
 };
 
-export default SystemSettingsModal;ult SystemSettingsModal;
+export default SystemSettingsModal;

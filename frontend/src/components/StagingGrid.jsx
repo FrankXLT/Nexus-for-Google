@@ -64,10 +64,4 @@ const StagingGrid = () => {
     );
 };
 
-export default StagingGrid;text-center mt-10">No actionable artifacts found.</div>
-            )}
-        </div>
-    );
-};
-
 export default StagingGrid;
