@@ -283,6 +283,13 @@ deploy() {
         "
     fi
 
+    if [ -f "credentials.json" ]; then
+        echo "Found local credentials.json. Syncing to remote server..."
+        NEW_CLIENT_ID=$(grep -o '"client_id":"[^"]*"' credentials.json | head -n 1 | cut -d'"' -f4)
+        gcloud compute scp credentials.json "$TARGET_VM:/opt/nexus/shared/credentials.json" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --quiet --strict-host-key-checking=no
+        gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --quiet --strict-host-key-checking=no --command="sudo sed -i \"s/^GOOGLE_CLIENT_ID=.*/GOOGLE_CLIENT_ID='${NEW_CLIENT_ID}'/g\" /opt/nexus/shared/.env"
+    fi
+
     echo -e "\n${YELLOW}--- 3. Remote Build & Hot-Swap ---${NC}"
     echo "Commanding VM to download code directly from GitHub and build..."
     gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --quiet --strict-host-key-checking=no --command="
@@ -421,8 +428,8 @@ auth_tunnel() {
     echo -e "\n${YELLOW}Opening SSH Tunnel to $TARGET_VM on port 8080...${NC}"
     echo -e "When the Google Auth link appears, CTRL+CLICK to open it in your browser."
     
-    # Removed redundant 'pip install' and added 'python -u' to force unbuffered printing!
-    AUTH_CMD="sudo systemctl stop nexus.service || true; export NEXUS_SHARED_DIR=/opt/nexus/shared; cd /opt/nexus/current && source venv/bin/activate && python -u backend/auth/workspace_auth.py; sudo systemctl start nexus.service"
+    # We use sed to forcefully hot-patch the python script directly on the server to bypass any Git sync issues!
+    AUTH_CMD="sudo systemctl stop nexus.service || true; pkill -9 -f workspace_auth || true; export NEXUS_SHARED_DIR=/opt/nexus/shared; cd /opt/nexus/current && source venv/bin/activate && sed -i \"s/prompt='consent')/prompt='consent', open_browser=False)/g\" backend/auth/workspace_auth.py && python -u backend/auth/workspace_auth.py; sudo systemctl start nexus.service"
     
     gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --ssh-flag="-L" --ssh-flag="8080:127.0.0.1:8080" --quiet --strict-host-key-checking=no --command="$AUTH_CMD"
 }

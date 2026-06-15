@@ -56,7 +56,9 @@ This creates the secure "Sign in with Google" button so Nexus can read your Gmai
    * **CRITICAL:** On the summary screen, click the **Publish App** button to push it to "In production". If you leave it in "Testing", your login tokens will expire every 7 days!
 2. **Create Credentials:** Click **Credentials** on the left menu.
    * Click **+ CREATE CREDENTIALS** -> **OAuth client ID**.
-   * Application type: **Desktop app**. Name it `Nexus Auth`. Click Create.
+   * Application type: **Web application**. Name it `Nexus Auth`. Click Create.
+   * Under **Authorized JavaScript origins**, click Add URI and paste your exact domain (e.g., https://nexus.yourdomain.com).
+   * Under **Authorized redirect URIs**, click Add URI and paste http://localhost:8081/ (We use 8081 to avoid common port conflicts).
    * **CRITICAL:** Click the **Download JSON** button on the popup. Save it to your computer, rename it exactly to `credentials.json`, and place it inside your `Nexus-for-Google` folder (right next to the `nexus.sh` script).
 
 ### 6. Your Digital Lock (`NEXUS_HMAC_SECRET`)
