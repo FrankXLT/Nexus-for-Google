@@ -421,7 +421,8 @@ auth_tunnel() {
     echo -e "\n${YELLOW}Opening SSH Tunnel to $TARGET_VM on port 8080...${NC}"
     echo -e "When the Google Auth link appears, CTRL+CLICK to open it in your browser."
     
-    AUTH_CMD="sudo systemctl stop nexus.service; export NEXUS_SHARED_DIR=/opt/nexus/shared; cd /opt/nexus/current && source venv/bin/activate && pip install google-auth-oauthlib google-api-python-client --quiet && python backend/auth/workspace_auth.py; sudo systemctl start nexus.service"
+    # Removed redundant 'pip install' and added 'python -u' to force unbuffered printing!
+    AUTH_CMD="sudo systemctl stop nexus.service || true; export NEXUS_SHARED_DIR=/opt/nexus/shared; cd /opt/nexus/current && source venv/bin/activate && python -u backend/auth/workspace_auth.py; sudo systemctl start nexus.service"
     
     gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --ssh-flag="-L" --ssh-flag="8080:127.0.0.1:8080" --quiet --strict-host-key-checking=no --command="$AUTH_CMD"
 }
