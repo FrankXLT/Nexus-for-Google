@@ -35,7 +35,7 @@ def authenticate_workspace():
     flow = InstalledAppFlow.from_client_secrets_file(credentials_path, SCOPES)
     
     # CRITICAL LAW: request access_type='offline' and prompt='consent'
-    creds = flow.run_local_server(port=8080, host='127.0.0.1', access_type='offline', prompt='consent')
+    creds = flow.run_local_server(port=8080, host='127.0.0.1', access_type='offline', prompt='consent', open_browser=False)
 
     with open(token_path, 'w') as token_file:
         token_file.write(creds.to_json())
