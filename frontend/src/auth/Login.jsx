@@ -16,14 +16,22 @@ import Icon from '../components/Icon';
  * @returns {JSX.Element}
  */
 const Login = () => {
-    const { login } = useAuth();
+    const { login, isAuthenticated } = useAuth();
+
+    useEffect(() => {
+        if (isAuthenticated) {
+            window.location.href = '/';
+        }
+    }, [isAuthenticated]);
 
     const onSuccess = async (credentialResponse) => {
         try {
-            await axios.post('/api/auth/google', { token: credentialResponse.credential }, { withCredentials: true });
+            await axios.post('/api/auth/google', { id_token: credentialResponse.credential }, { withCredentials: true });
             login(credentialResponse.credential);
+            window.location.href = '/';
         } catch (error) {
             console.error("Login failed", error);
+            alert("Login Failed: " + (error.response?.data?.detail || error.message));
         }
     };
 
@@ -35,7 +43,10 @@ const Login = () => {
                 <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID}>
                     <GoogleLogin
                         onSuccess={onSuccess}
-                        onError={() => console.log('Login Failed')}
+                        onError={() => {
+                            console.log('Login Failed');
+                            alert('Google Popup Login Failed.');
+                        }}
                     />
                 </GoogleOAuthProvider>
             </div>

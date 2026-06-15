@@ -16,9 +16,8 @@ async def authenticate_google(request: GoogleAuthRequest, response: Response):
     client_id = os.environ.get("GOOGLE_CLIENT_ID")
     if not client_id:
         raise HTTPException(status_code=500, detail="GOOGLE_CLIENT_ID not configured")
-
+    
     try:
-        # Verify the token
         id_info = id_token.verify_oauth2_token(
             request.id_token,
             google_requests.Request(),
@@ -27,23 +26,22 @@ async def authenticate_google(request: GoogleAuthRequest, response: Response):
         email = id_info.get("email")
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid token")
-
-    # Check authorized emails
+        
     authorized_emails = os.environ.get("AUTHORIZED_EMAILS", "")
-    allowed_list = [e.strip() for e in authorized_emails.split(",") if e.strip()]
-    if email not in allowed_list:
+    allowed_list = [e.strip().lower() for e in authorized_emails.split(",") if e.strip()]
+    
+    if not email or email.lower() not in allowed_list:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized email")
-
-    # Generate internal JWT
+        
     jwt_secret = os.environ.get("NEXUS_HMAC_SECRET", "default_secret")
     exp = int(time.time()) + (24 * 3600)
     payload = {
         "email": email,
         "exp": exp
     }
+    
     encoded_jwt = jwt.encode(payload, jwt_secret, algorithm="HS256")
-
-    # Set HttpOnly cookie
+    
     response.set_cookie(
         key="nexus_session",
         value=encoded_jwt,
@@ -55,23 +53,10 @@ async def authenticate_google(request: GoogleAuthRequest, response: Response):
 
 @router.get("/api/auth/status")
 async def auth_status(request: Request):
-    """
-    Checks the validity of the current user's session JWT.
-
-    Layer Interactions:
-    - Layer 1 (Foundation): Verifies session integrity for UI routing.
-
-    State Interactions:
-    - None
-
-    Args/Returns:
-    - Args: FastAPI Request object
-    - Returns: JSON status and email if valid
-    """
     token = request.cookies.get("nexus_session")
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing session")
-
+        
     jwt_secret = os.environ.get("NEXUS_HMAC_SECRET", "default_secret")
     try:
         payload = jwt.decode(token, jwt_secret, algorithms=["HS256"])

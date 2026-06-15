@@ -425,13 +425,12 @@ EOF
 
 auth_tunnel() {
     load_env
-    echo -e "\n${YELLOW}Opening SSH Tunnel to $TARGET_VM on port 8080...${NC}"
+    echo -e "\n${YELLOW}Opening SSH Tunnel to $TARGET_VM on port 8081...${NC}"
     echo -e "When the Google Auth link appears, CTRL+CLICK to open it in your browser."
     
-    # We use sed to forcefully hot-patch the python script directly on the server to bypass any Git sync issues!
-    AUTH_CMD="sudo systemctl stop nexus.service || true; pkill -9 -f workspace_auth || true; export NEXUS_SHARED_DIR=/opt/nexus/shared; cd /opt/nexus/current && source venv/bin/activate && sed -i \"s/prompt='consent')/prompt='consent', open_browser=False)/g\" backend/auth/workspace_auth.py && python -u backend/auth/workspace_auth.py; sudo systemctl start nexus.service"
+    AUTH_CMD="sudo systemctl stop nexus.service || true; export NEXUS_SHARED_DIR=/opt/nexus/shared; cd /opt/nexus/current && source venv/bin/activate && python -u backend/auth/workspace_auth.py; sudo systemctl start nexus.service"
     
-    gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --ssh-flag="-L" --ssh-flag="8080:127.0.0.1:8080" --quiet --strict-host-key-checking=no --command="$AUTH_CMD"
+    gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --ssh-flag="-L" --ssh-flag="8081:127.0.0.1:8081" --quiet --strict-host-key-checking=no --command="$AUTH_CMD"
 }
 
 health() {

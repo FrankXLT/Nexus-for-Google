@@ -19,7 +19,6 @@ def authenticate_workspace():
     credentials_path = os.path.join(shared_dir, "credentials.json")
     token_path = os.path.join(shared_dir, "token.json")
 
-    # The required scopes for Nexus Workspace system Auth
     SCOPES = [
         'https://www.googleapis.com/auth/gmail.modify',
         'https://www.googleapis.com/auth/gmail.metadata',
@@ -29,12 +28,10 @@ def authenticate_workspace():
 
     if not os.path.exists(credentials_path):
         print(f"Error: {credentials_path} not found.")
-        print("Please place the OAuth 2.0 Client ID credentials.json file in the shared directory.")
         return
 
     flow = InstalledAppFlow.from_client_secrets_file(credentials_path, SCOPES)
     
-    # CRITICAL LAW: request access_type='offline' and prompt='consent'
     creds = flow.run_local_server(port=8081, host='127.0.0.1', access_type='offline', prompt='consent', open_browser=False)
 
     with open(token_path, 'w') as token_file:
