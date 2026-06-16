@@ -1,34 +1,25 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import axios from 'axios';
 import { useAuth } from './AuthProvider';
 import Icon from '../components/Icon';
 
-/**
- * Login page using Google OAuth provider.
- *
- * Layer Interactions:
- * - Layer 6 (Frontend UI)
- *
- * State Interactions:
- * - Mutates AuthContext via login function.
- *
- * @returns {JSX.Element}
- */
 const Login = () => {
     const { login, isAuthenticated } = useAuth();
+    const navigate = useNavigate();
 
     useEffect(() => {
         if (isAuthenticated) {
-            window.location.href = '/';
+            navigate('/', { replace: true });
         }
-    }, [isAuthenticated]);
+    }, [isAuthenticated, navigate]);
 
     const onSuccess = async (credentialResponse) => {
         try {
             await axios.post('/api/auth/google', { id_token: credentialResponse.credential }, { withCredentials: true });
             login(credentialResponse.credential);
-            window.location.href = '/';
+            navigate('/', { replace: true });
         } catch (error) {
             console.error("Login failed", error);
             alert("Login Failed: " + (error.response?.data?.detail || error.message));

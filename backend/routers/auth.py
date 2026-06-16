@@ -47,7 +47,8 @@ async def authenticate_google(request: GoogleAuthRequest, response: Response):
         value=encoded_jwt,
         httponly=True,
         secure=True,
-        samesite='strict'
+        samesite='lax',
+        path='/'
     )
     return {"status": "ok"}
 
