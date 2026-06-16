@@ -19,8 +19,7 @@ async def get_theme(user: str = Depends(get_current_user)):
                 return json.loads(row[0])
             except json.JSONDecodeError:
                 pass
-        
-        # Fallback theme if not configured
+                
         return {
             "--bg-base": "#121212",
             "--bg-surface": "#1e1e1e",
@@ -36,21 +35,8 @@ async def get_artifacts(
     state: Optional[str] = None,
     user: str = Depends(get_current_user)
 ):
-    """
-    Retrieves paginated workspace artifacts with joined taxonomy linkages.
-
-    Layer Interactions:
-    - Layer 6 (Frontend UI): Powers the Staging Grid with server-side pagination.
-
-    State Interactions:
-    - None
-
-    Args/Returns:
-    - Args: limit, offset, optional state filter
-    - Returns: List of artifact dictionary records
-    """
     query = """
-        SELECT wa.id, wa.state, wa.source_system, wa.source_sender, wa.priority, 
+        SELECT wa.id, wa.state, wa.source_system, wa.source_sender, wa.priority,
                wa.nexus_important, wa.ui_summary, wa.created_at_ts,
                c.name as category_name, e.canonical_name as entity_name, e.primary_color_hex,
                p.name as purpose_name
@@ -64,7 +50,7 @@ async def get_artifacts(
     if state:
         query += " WHERE wa.state = ?"
         params.append(state)
-    
+        
     query += " ORDER BY wa.priority ASC, wa.created_at_ts DESC LIMIT ? OFFSET ?"
     params.extend([limit, offset])
     
