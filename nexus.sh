@@ -4,23 +4,20 @@
 set -e
 set -o pipefail
 export CLOUDSDK_COMPUTE_USE_OPENSSH=1
-export CLOUDSDK_CORE_DISABLE_PROMPTS=1 # Prevents gcloud from hanging on invisible Yes/No prompts
+export CLOUDSDK_CORE_DISABLE_PROMPTS=1
 
-# Auto-navigate to script directory so it can be run from anywhere
 cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null || true
 
-# Color Codes
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 echo -e "${CYAN}====================================================${NC}"
 echo -e "${CYAN}      NEXUS: MASTER CONTROL & DEPLOYMENT            ${NC}"
 echo -e "${CYAN}====================================================${NC}"
 
-# Ensure gcloud is installed
 if ! command -v gcloud &> /dev/null; then
     echo -e "${RED}Error: Google Cloud CLI (gcloud) is not installed.${NC}"
     exit 1
@@ -162,15 +159,15 @@ echo "/swapfile none swap sw 0 0" >> /etc/fstab
     echo "Injecting .env file to remote server..."
     gcloud compute ssh "$INSTANCE_NAME" --zone="$ZONE" --project="$PROJECT_ID" --quiet --strict-host-key-checking=no --command="
         cat <<EOF > /opt/nexus/shared/.env
-NEXUS_HMAC_SECRET=$NEXUS_HMAC_SECRET
-NEXUS_API_KEY=$NEXUS_API_KEY
-NEXUS_PUBLIC_DOMAIN=$NEXUS_PUBLIC_DOMAIN
-CLOUDFLARE_API_TOKEN=$CLOUDFLARE_API_TOKEN
-AUTHORIZED_EMAILS=$AUTHORIZED_EMAILS
-GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
-DOCAI_PROJECT_ID=$DOCAI_PROJECT_ID
-DOCAI_LOCATION=us
-DOCAI_PROCESSOR_ID=$DOCAI_PROCESSOR_ID
+NEXUS_HMAC_SECRET='$NEXUS_HMAC_SECRET'
+NEXUS_API_KEY='$NEXUS_API_KEY'
+NEXUS_PUBLIC_DOMAIN='$NEXUS_PUBLIC_DOMAIN'
+CLOUDFLARE_API_TOKEN='$CLOUDFLARE_API_TOKEN'
+AUTHORIZED_EMAILS='$AUTHORIZED_EMAILS'
+GOOGLE_CLIENT_ID='$GOOGLE_CLIENT_ID'
+DOCAI_PROJECT_ID='$DOCAI_PROJECT_ID'
+DOCAI_LOCATION='us'
+DOCAI_PROCESSOR_ID='$DOCAI_PROCESSOR_ID'
 EOF
     "
 
@@ -285,9 +282,7 @@ deploy() {
 
     if [ -f "credentials.json" ]; then
         echo "Found local credentials.json. Syncing to remote server..."
-        NEW_CLIENT_ID=$(grep -o '"client_id":"[^"]*"' credentials.json | head -n 1 | cut -d'"' -f4)
         gcloud compute scp credentials.json "$TARGET_VM:/opt/nexus/shared/credentials.json" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --quiet --strict-host-key-checking=no
-        gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --quiet --strict-host-key-checking=no --command="sudo sed -i \"s/^GOOGLE_CLIENT_ID=.*/GOOGLE_CLIENT_ID='${NEW_CLIENT_ID}'/g\" /opt/nexus/shared/.env"
     fi
 
     echo -e "\n${YELLOW}--- 3. Remote Build & Hot-Swap ---${NC}"
@@ -295,13 +290,18 @@ deploy() {
     gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --quiet --strict-host-key-checking=no --command="
         set -e
         
+        echo '-> Extracting variables securely without sourcing...'
+        GOOGLE_CLIENT_ID=\$(grep '^GOOGLE_CLIENT_ID=' /opt/nexus/shared/.env | cut -d'=' -f2- | tr -d '\"' | tr -d \"'\")
+        NEXUS_PUBLIC_DOMAIN=\$(grep '^NEXUS_PUBLIC_DOMAIN=' /opt/nexus/shared/.env | cut -d'=' -f2- | tr -d '\"' | tr -d \"'\" | tr -d '\r')
+        CLOUDFLARE_API_TOKEN=\$(grep '^CLOUDFLARE_API_TOKEN=' /opt/nexus/shared/.env | cut -d'=' -f2- | tr -d '\"' | tr -d \"'\" | tr -d '\r')
+        
         echo '-> Checking Node.js version...'
         CURRENT_NODE=\$(node -v 2>/dev/null | cut -d'v' -f2 | cut -d'.' -f1 || echo '0')
         if [ \"\$CURRENT_NODE\" -lt 22 ]; then
             echo '-> Upgrading Node.js to v22 (LTS) to support Vite...'
             sudo apt-get remove -y nodejs npm > /dev/null 2>&1 || true
             curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - > /dev/null 2>&1
-            sudo apt-get install -y nodejs > /dev/null 2>&1
+            sudo apt-get install -y nodejs psmisc > /dev/null 2>&1
             hash -r
         fi
 
@@ -319,12 +319,6 @@ deploy() {
         
         echo '-> Downloading repository archive from GitHub...'
         curl -sL \"https://github.com/$REPO/archive/refs/heads/$SELECTED_BRANCH.tar.gz\" | tar -xz -C \$RELEASE_DIR --strip-components=1
-        
-        source /opt/nexus/shared/.env
-        
-        echo '-> Auto-healing: Stripping quotes from .env to fix systemd literal parsing...'
-        sudo sed -i "s/'//g" /opt/nexus/shared/.env
-        sudo sed -i 's/"//g' /opt/nexus/shared/.env
         
         echo '-> Injecting Google Client ID into React Frontend...'
         echo \"VITE_GOOGLE_CLIENT_ID=\$GOOGLE_CLIENT_ID\" > \$RELEASE_DIR/frontend/.env
@@ -351,9 +345,6 @@ deploy() {
         sudo chmod 755 \$RELEASE_DIR
         
         echo '-> Configuring Caddy & Systemd'
-        # Strip invisible Windows carriage returns to prevent parsing crashes
-        NEXUS_PUBLIC_DOMAIN=\$(echo \"\$NEXUS_PUBLIC_DOMAIN\" | tr -d '\r')
-        CLOUDFLARE_API_TOKEN=\$(echo \"\$CLOUDFLARE_API_TOKEN\" | tr -d '\r')
 
         TLS_BLOCK=\"\"
         if [ -n \"\$CLOUDFLARE_API_TOKEN\" ]; then
@@ -362,7 +353,6 @@ deploy() {
     }\"
         fi
 
-        # Write safely to /tmp first to avoid sudo subshell scoping drops
         cat > /tmp/Caddyfile <<EOF
 \$NEXUS_PUBLIC_DOMAIN {
     \$TLS_BLOCK
@@ -378,14 +368,9 @@ deploy() {
 EOF
         sudo mv /tmp/Caddyfile /etc/caddy/Caddyfile
         
-        # Ensure Caddy can bind to secure ports
         sudo setcap cap_net_bind_service=+ep /usr/bin/caddy || true
-        
-        # Format and validate
         sudo caddy fmt --overwrite /etc/caddy/Caddyfile || true
         sudo /usr/bin/caddy validate --config /etc/caddy/Caddyfile || echo 'WARNING: Caddy validation failed'
-        
-        # Use restart instead of reload
         sudo systemctl restart caddy
 
         cat > /tmp/nexus.service <<EOF
@@ -432,7 +417,8 @@ auth_tunnel() {
     echo -e "\n${YELLOW}Opening SSH Tunnel to $TARGET_VM on port 8081...${NC}"
     echo -e "When the Google Auth link appears, CTRL+CLICK to open it in your browser."
     
-    AUTH_CMD="sudo systemctl stop nexus.service || true; export NEXUS_SHARED_DIR=/opt/nexus/shared; cd /opt/nexus/current && source venv/bin/activate && python -u backend/auth/workspace_auth.py; sudo systemctl start nexus.service"
+    # Safely install psmisc, kill port 8081 specifically, and run auth script
+    AUTH_CMD="sudo apt-get install -y psmisc >/dev/null 2>&1 || true; sudo fuser -k 8081/tcp 2>/dev/null || true; sudo systemctl stop nexus.service || true; export NEXUS_SHARED_DIR=/opt/nexus/shared; cd /opt/nexus/current && source venv/bin/activate && python -u backend/auth/workspace_auth.py; sudo systemctl start nexus.service"
     
     gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --ssh-flag="-L" --ssh-flag="8081:127.0.0.1:8081" --quiet --strict-host-key-checking=no --command="$AUTH_CMD"
 }
