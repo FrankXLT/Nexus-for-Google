@@ -162,15 +162,15 @@ echo "/swapfile none swap sw 0 0" >> /etc/fstab
     echo "Injecting .env file to remote server..."
     gcloud compute ssh "$INSTANCE_NAME" --zone="$ZONE" --project="$PROJECT_ID" --quiet --strict-host-key-checking=no --command="
         cat <<EOF > /opt/nexus/shared/.env
-NEXUS_HMAC_SECRET='$NEXUS_HMAC_SECRET'
-NEXUS_API_KEY='$NEXUS_API_KEY'
-NEXUS_PUBLIC_DOMAIN='$NEXUS_PUBLIC_DOMAIN'
-CLOUDFLARE_API_TOKEN='$CLOUDFLARE_API_TOKEN'
-AUTHORIZED_EMAILS='$AUTHORIZED_EMAILS'
-GOOGLE_CLIENT_ID='$GOOGLE_CLIENT_ID'
-DOCAI_PROJECT_ID='$DOCAI_PROJECT_ID'
-DOCAI_LOCATION='us'
-DOCAI_PROCESSOR_ID='$DOCAI_PROCESSOR_ID'
+NEXUS_HMAC_SECRET=$NEXUS_HMAC_SECRET
+NEXUS_API_KEY=$NEXUS_API_KEY
+NEXUS_PUBLIC_DOMAIN=$NEXUS_PUBLIC_DOMAIN
+CLOUDFLARE_API_TOKEN=$CLOUDFLARE_API_TOKEN
+AUTHORIZED_EMAILS=$AUTHORIZED_EMAILS
+GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
+DOCAI_PROJECT_ID=$DOCAI_PROJECT_ID
+DOCAI_LOCATION=us
+DOCAI_PROCESSOR_ID=$DOCAI_PROCESSOR_ID
 EOF
     "
 
@@ -321,6 +321,10 @@ deploy() {
         curl -sL \"https://github.com/$REPO/archive/refs/heads/$SELECTED_BRANCH.tar.gz\" | tar -xz -C \$RELEASE_DIR --strip-components=1
         
         source /opt/nexus/shared/.env
+        
+        echo '-> Auto-healing: Stripping quotes from .env to fix systemd literal parsing...'
+        sudo sed -i "s/'//g" /opt/nexus/shared/.env
+        sudo sed -i 's/"//g' /opt/nexus/shared/.env
         
         echo '-> Injecting Google Client ID into React Frontend...'
         echo \"VITE_GOOGLE_CLIENT_ID=\$GOOGLE_CLIENT_ID\" > \$RELEASE_DIR/frontend/.env

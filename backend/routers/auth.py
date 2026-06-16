@@ -13,7 +13,7 @@ class GoogleAuthRequest(BaseModel):
 
 @router.post("/api/auth/google")
 async def authenticate_google(request: GoogleAuthRequest, response: Response):
-    client_id = os.environ.get("GOOGLE_CLIENT_ID")
+    client_id = os.environ.get("GOOGLE_CLIENT_ID", "").replace("'", "").replace('"', "")
     if not client_id:
         raise HTTPException(status_code=500, detail="GOOGLE_CLIENT_ID not configured")
     
@@ -27,13 +27,13 @@ async def authenticate_google(request: GoogleAuthRequest, response: Response):
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid token")
         
-    authorized_emails = os.environ.get("AUTHORIZED_EMAILS", "")
+    authorized_emails = os.environ.get("AUTHORIZED_EMAILS", "").replace("'", "").replace('"', "")
     allowed_list = [e.strip().lower() for e in authorized_emails.split(",") if e.strip()]
     
     if not email or email.lower() not in allowed_list:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized email")
         
-    jwt_secret = os.environ.get("NEXUS_HMAC_SECRET", "default_secret")
+    jwt_secret = os.environ.get("NEXUS_HMAC_SECRET", "default_secret").replace("'", "").replace('"', "")
     exp = int(time.time()) + (24 * 3600)
     payload = {
         "email": email,
@@ -57,7 +57,7 @@ async def auth_status(request: Request):
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing session")
         
-    jwt_secret = os.environ.get("NEXUS_HMAC_SECRET", "default_secret")
+    jwt_secret = os.environ.get("NEXUS_HMAC_SECRET", "default_secret").replace("'", "").replace('"', "")
     try:
         payload = jwt.decode(token, jwt_secret, algorithms=["HS256"])
         return {"status": "ok", "email": payload.get("email")}
