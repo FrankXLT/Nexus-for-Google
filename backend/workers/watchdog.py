@@ -36,10 +36,10 @@ class WatchdogWorker(BaseWorker):
             # 1. Webhook Renewals (12h logic, stubbed API call)
             # Query WEBHOOK_REGISTRY, renew channels expiring within 48h (current_ts + 48*3600)
             threshold = current_ts + (48 * 3600)
-            async with db.execute("SELECT channel_id, resource_uri FROM WEBHOOK_REGISTRY WHERE expiration_ts < ?", (threshold,)) as cursor:
+            async with db.execute("SELECT channel_id, resource_id FROM WEBHOOK_REGISTRY WHERE expiration_ts < ?", (threshold,)) as cursor:
                 expiring_channels = await cursor.fetchall()
-                for channel_id, resource_uri in expiring_channels:
-                    logger.info(f"Renewing webhook channel {channel_id} for {resource_uri} (Stub)")
+                for channel_id, resource_id in expiring_channels:
+                    logger.info(f"Renewing webhook channel {channel_id} for {resource_id} (Stub)")
                     # STUB: Call Google API to renew
                     # Update registry with new expiration (e.g., current_ts + 7 days)
                     new_exp = current_ts + (7 * 24 * 3600)
