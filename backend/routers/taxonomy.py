@@ -51,4 +51,4 @@ async def approve_linkage(linkage_id: str, user: str = Depends(get_current_user)
         except Exception as e:
             await db.rollback()
             raise HTTPException(status_code=500, detail=str(e))
-e))
+
