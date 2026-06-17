@@ -290,6 +290,9 @@ deploy() {
     gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --quiet --strict-host-key-checking=no --command="
         set -e
         
+        echo '-> Stopping Nexus service to free CPU/RAM for the build process...'
+        sudo systemctl stop nexus.service || true
+        
         echo '-> Extracting variables securely without sourcing...'
         GOOGLE_CLIENT_ID=\$(grep '^GOOGLE_CLIENT_ID=' /opt/nexus/shared/.env | cut -d'=' -f2- | tr -d '\"' | tr -d \"'\")
         NEXUS_PUBLIC_DOMAIN=\$(grep '^NEXUS_PUBLIC_DOMAIN=' /opt/nexus/shared/.env | cut -d'=' -f2- | tr -d '\"' | tr -d \"'\" | tr -d '\r')
@@ -317,9 +320,10 @@ deploy() {
         RELEASE_DIR=/opt/nexus/releases/\$(date +%Y%m%d_%H%M%S)
         mkdir -p \$RELEASE_DIR
         
-        echo '-> Downloading repository archive from GitHub...'
-        curl -sL \"https://github.com/$REPO/archive/refs/heads/$SELECTED_BRANCH.tar.gz\" | tar -xz -C \$RELEASE_DIR --strip-components=1
-        
+        echo '-> Downloading repository directly from GitHub to bypass tarball caches...'
+        git clone --depth 1 --branch \$SELECTED_BRANCH \"https://github.com/$REPO.git\" \$RELEASE_DIR
+        rm -rf \$RELEASE_DIR/.git
+               
         echo '-> Injecting Google Client ID into React Frontend...'
         echo \"VITE_GOOGLE_CLIENT_ID=\$GOOGLE_CLIENT_ID\" > \$RELEASE_DIR/frontend/.env
 
@@ -406,7 +410,7 @@ EOF
 
         sudo systemctl daemon-reload
         sudo systemctl enable nexus.service
-        sudo systemctl restart nexus.service
+        sudo systemctl start nexus.service
         echo '-> Deployment Complete!'
     "
     echo -e "${GREEN}System is LIVE at https://$NEXUS_PUBLIC_DOMAIN${NC}"
@@ -452,6 +456,20 @@ clean() {
     "
 }
 
+ssh_terminal() {
+    load_env
+    echo -e "\n${CYAN}Opening interactive SSH terminal to $TARGET_VM...${NC}"
+    gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID"
+}
+
+download_dbs() {
+    load_env
+    echo -e "\n${CYAN}Downloading SQLite databases from $TARGET_VM...${NC}"
+    mkdir -p ./local_db_inspect
+    gcloud compute scp "$TARGET_VM:/opt/nexus/shared/data/*.db" "./local_db_inspect/" --zone="$TARGET_ZONE" --project="$PROJECT_ID"
+    echo -e "${GREEN}Databases downloaded to ./local_db_inspect/${NC}"
+}
+
 show_menu() {
     echo -e "${CYAN}====================================================${NC}"
     echo -e "${CYAN}       NEXUS MASTER CONTROL PANEL (LOCAL)           ${NC}"
@@ -461,7 +479,9 @@ show_menu() {
     echo "3. Open Auth Tunnel (--auth-tunnel)"
     echo "4. Fleet Health Dashboard (--health)"
     echo "5. Clean Old Releases & Vacuum DB (--clean)"
-    echo "6. Exit"
+    echo "6. Open SSH Terminal (--ssh)"
+    echo "7. Download Databases (--download-dbs)"
+    echo "8. Exit"
     echo -e "${CYAN}====================================================${NC}"
     read -p "Select an option: " opt
     case $opt in
@@ -470,7 +490,9 @@ show_menu() {
         3) auth_tunnel ;;
         4) health ;;
         5) clean ;;
-        6) exit 0 ;;
+        6) ssh_terminal ;;
+        7) download_dbs ;;
+        8) exit 0 ;;
         *) echo -e "${RED}Invalid option${NC}" ;;
     esac
 }
@@ -481,6 +503,8 @@ case "$1" in
     --auth-tunnel) auth_tunnel ;;
     --health) health ;;
     --clean) clean ;;
+    --ssh) ssh_terminal ;;
+    --download-dbs) download_dbs ;;
     "") show_menu ;;
     *) echo -e "${RED}Unknown argument: $1${NC}" ;;
 esac
