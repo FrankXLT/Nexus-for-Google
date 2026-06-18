@@ -6,6 +6,7 @@ def authenticate_workspace():
     credentials_path = os.path.join(shared_dir, "credentials.json")
     token_path = os.path.join(shared_dir, "token.json")
     
+    # We MUST use gmail.modify to allow 'q' queries and full email downloads
     SCOPES = [
         'https://www.googleapis.com/auth/gmail.modify',
         'https://www.googleapis.com/auth/drive'
@@ -20,6 +21,7 @@ def authenticate_workspace():
     
     with open(token_path, 'w') as token_file:
         token_file.write(creds.to_json())
+        
     print(f"Successfully generated token.json at {token_path}")
 
 if __name__ == "__main__":
