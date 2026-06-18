@@ -263,13 +263,15 @@ deploy() {
         done
         echo ""
         read -p "Select branch number to deploy [0]: " bIdx
+        bIdx=$(echo "$bIdx" | tr -d '\r') # Force strip Windows carriage returns
         bIdx=${bIdx:-0}
-        SELECTED_BRANCH="${branches[$bIdx]}"
+        SELECTED_BRANCH=$(echo "${branches[$bIdx]}" | tr -d '\r') # Force strip Windows carriage returns
     fi
     echo -e "${GREEN}Targeting remote branch: $SELECTED_BRANCH${NC}"
     
     echo -e "\n${YELLOW}--- 2. Database Backup ---${NC}"
     read -p "Backup remote SQLite databases before deploying? (Y/n): " doBackup
+    doBackup=$(echo "$doBackup" | tr -d '\r')
     if [[ ! "$doBackup" =~ ^[Nn]$ ]]; then
         echo "Creating backup on remote server..."
         gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --quiet --strict-host-key-checking=no --command="
@@ -321,7 +323,7 @@ deploy() {
         mkdir -p \$RELEASE_DIR
         
         echo '-> Downloading repository directly from GitHub to bypass tarball caches...'
-        git clone --depth 1 --branch \$SELECTED_BRANCH \"https://github.com/$REPO.git\" \$RELEASE_DIR
+        git clone --depth 1 --branch ${SELECTED_BRANCH:-development} https://github.com/$REPO.git \$RELEASE_DIR
         rm -rf \$RELEASE_DIR/.git
                
         echo '-> Injecting Google Client ID into React Frontend...'
@@ -508,3 +510,5 @@ case "$1" in
     "") show_menu ;;
     *) echo -e "${RED}Unknown argument: $1${NC}" ;;
 esac
+EOF_SCRIPT
+chmod +x nexus.sh
