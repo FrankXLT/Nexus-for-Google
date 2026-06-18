@@ -20,9 +20,9 @@ class ThemeResponseSchema(BaseModel):
 async def get_config(user: str = Depends(get_current_user)):
     async with aiosqlite.connect(CORE_DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        cursor = await db.execute("SELECT config_key, config_value FROM CONFIG_SYSTEM")
+        cursor = await db.execute("SELECT key, value_json FROM CONFIG_SYSTEM")
         rows = await cursor.fetchall()
-        return {row['config_key']: row['config_value'] for row in rows}
+        return {row['key']: row['value_json'] for row in rows}
 
 @router.patch("/config")
 async def update_config(payload: Dict[str, str] = Body(...), user: str = Depends(get_current_user)):
@@ -42,7 +42,7 @@ async def update_config(payload: Dict[str, str] = Body(...), user: str = Depends
     async with aiosqlite.connect(CORE_DB_PATH) as db:
         await db.execute("BEGIN IMMEDIATE")
         for k, v in payload.items():
-            await db.execute("UPDATE CONFIG_SYSTEM SET config_value = ? WHERE config_key = ?", (str(v), k))
+            await db.execute("UPDATE CONFIG_SYSTEM SET value_json = ? WHERE key = ?", (str(v), k))
         await db.commit()
         return {"status": "success"}
 
@@ -69,7 +69,7 @@ async def generate_theme(user: str = Depends(get_current_user)):
             
             # 1. Update Global Support Colors
             await db.execute(
-                "UPDATE CONFIG_SYSTEM SET config_value = ? WHERE config_key = 'ui_theme_support'", 
+                "UPDATE CONFIG_SYSTEM SET value_json = ? WHERE key = 'ui_theme_support'", 
                 (support_json,)
             )
             

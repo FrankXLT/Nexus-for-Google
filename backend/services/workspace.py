@@ -20,10 +20,7 @@ def get_credentials() -> Credentials:
     if not os.path.exists(token_path):
         raise FileNotFoundError(f"token.json not found at {token_path}. User must authenticate first.")
     
-    return Credentials.from_authorized_user_file(token_path, [
-        "https://www.googleapis.com/auth/gmail.modify",
-        "https://www.googleapis.com/auth/drive"
-    ])
+    return Credentials.from_authorized_user_file(token_path)
 
 def get_gmail_client():
     """

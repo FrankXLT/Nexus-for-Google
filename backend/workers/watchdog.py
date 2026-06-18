@@ -30,7 +30,7 @@ class WatchdogWorker(BaseWorker):
             await db.execute("UPDATE WORKSPACE_ARTIFACTS SET locked_at_ts = NULL WHERE locked_at_ts < ?", (zombie_threshold,))
             await db.commit()
 
-            async with db.execute("SELECT config_value FROM CONFIG_SYSTEM WHERE config_key = 'db_audit_retention_days'") as cursor:
+            async with db.execute("SELECT value_json FROM CONFIG_SYSTEM WHERE key = 'db_audit_retention_days'") as cursor:
                 row = await cursor.fetchone()
                 retention_days = int(row[0]) if row else 30
             

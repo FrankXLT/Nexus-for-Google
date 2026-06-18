@@ -510,5 +510,4 @@ case "$1" in
     "") show_menu ;;
     *) echo -e "${RED}Unknown argument: $1${NC}" ;;
 esac
-EOF_SCRIPT
 chmod +x nexus.sh

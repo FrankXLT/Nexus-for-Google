@@ -12,7 +12,7 @@ CORE_DB_PATH = os.path.join(SHARED_DIR, "data", "nexus_core.db")
 @router.get("/theme")
 async def get_theme(user: str = Depends(get_current_user)):
     async with aiosqlite.connect(CORE_DB_PATH) as db:
-        cursor = await db.execute("SELECT config_value FROM CONFIG_SYSTEM WHERE config_key = 'ui_theme_support'")
+        cursor = await db.execute("SELECT value_json FROM CONFIG_SYSTEM WHERE key = 'ui_theme_support'")
         row = await cursor.fetchone()
         if row and row[0]:
             try:

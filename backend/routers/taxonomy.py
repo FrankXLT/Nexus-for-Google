@@ -18,7 +18,7 @@ async def get_linkages(limit: int = 500, offset: int = 0, user: str = Depends(ge
             LEFT JOIN CATEGORIES c ON t.category_id = c.id
             LEFT JOIN ENTITIES e ON t.entity_id = e.id
             LEFT JOIN PURPOSES p ON t.purpose_id = p.id
-            ORDER BY t.created_at_ts DESC LIMIT ? OFFSET ?
+            ORDER BY t.last_active_ts DESC LIMIT ? OFFSET ?
         """
         cursor = await db.execute(query, (limit, offset))
         rows = await cursor.fetchall()

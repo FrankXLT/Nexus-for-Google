@@ -21,9 +21,7 @@ def authenticate_workspace():
 
     SCOPES = [
         'https://www.googleapis.com/auth/gmail.modify',
-        'https://www.googleapis.com/auth/gmail.metadata',
-        'https://www.googleapis.com/auth/drive.metadata',
-        'https://www.googleapis.com/auth/drive.metadata.readonly'
+        'https://www.googleapis.com/auth/drive'
     ]
 
     if not os.path.exists(credentials_path):
