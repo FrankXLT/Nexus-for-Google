@@ -113,7 +113,8 @@ async def call_llm(artifact_id: str, prompt_name: str, payload_text: str, respon
     
     if use_grounding:
         config_kwargs["tools"] = [{"google_search": {}}]
-    elif response_model:
+        
+    if response_model:
         # LAYER 4 INLINE: How Pydantic models are passed to the response_schema configuration.
         # We pass standard Pydantic models directly to the SDK's `response_schema` parameter 
         # (while setting `response_mime_type` to application/json) to enforce strict JSON output 

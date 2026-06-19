@@ -4,6 +4,7 @@ import json
 import os
 import time
 import uuid
+import re
 from pydantic import BaseModel, Field
 from typing import Optional
 from backend.services.llm import call_llm
@@ -17,6 +18,11 @@ class EvaluationSchema(BaseModel):
     sub_entity_name: Optional[str] = None
     purpose_name: str
     nexus_important: bool
+
+
+class BrandSchema(BaseModel):
+    canonical_name: str
+    primary_color_hex: str = Field(default="#808080", description="Strictly a valid 7-character hex code starting with #. If unavailable, use #808080.")
 
 class EvaluatingWorker:
     """
@@ -123,27 +129,20 @@ class EvaluatingWorker:
         canonical_name = eval_result.entity_name
         
         try:
-            grounding_res_text = await call_llm(
+            brand_result = await call_llm(
                 artifact_id=artifact_id,
                 prompt_name="BRAND_GROUNDING",
                 payload_text=f"Entity Name: {eval_result.entity_name}",
-                use_grounding=True
+                use_grounding=True,
+                response_model=BrandSchema
             )
-            # Manually parse JSON from markdown
-            clean_json = grounding_res_text.strip()
-            if clean_json.startswith('```json'):
-                clean_json = clean_json[7:]
-            if clean_json.startswith('```'):
-                clean_json = clean_json[3:]
-            if clean_json.endswith('```'):
-                clean_json = clean_json[:-3]
-            clean_json = clean_json.strip()
-            
-            brand_data = json.loads(clean_json)
-            brand_hex = brand_data.get("primary_color_hex", brand_hex)
-            canonical_name = brand_data.get("canonical_name", canonical_name)
+            if brand_result:
+                canonical_name = brand_result.canonical_name
+                raw_hex = brand_result.primary_color_hex
+                if raw_hex and isinstance(raw_hex, str) and re.match(r"^#(?:[0-9a-fA-F]{3}){1,2}$", raw_hex):
+                    brand_hex = raw_hex
         except Exception as e:
-            print(f"BRAND_GROUNDING failed or parsing failed: {e}. Using fallback.")
+            print(f"BRAND_GROUNDING failed: {e}. Using fallback.")
 
         await self._inject_taxonomy(artifact, eval_result, canonical_name, brand_hex, taxonomy_ctx)
 

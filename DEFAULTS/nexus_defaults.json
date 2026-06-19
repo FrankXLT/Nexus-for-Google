@@ -34,7 +34,7 @@
     },
     { 
       "prompt_name": "EVALUATE_NOVEL", "model_tier": "gemini-2.5-pro", 
-      "prompt_text": "Novel artifact detected. Read the provided strict taxonomy descriptions. Deduce Category, Entity, Sub-Entity, and Purpose. Return JSON: {\"category\": \"string\", \"entity_name\": \"string\", \"sub_entity\": \"string\", \"purpose\": \"string\", \"is_important\": boolean}." 
+      "prompt_text": "Novel artifact detected. Deduce Category, Entity, Sub-Entity, and Purpose. RULE 1: 'entity_name' MUST be the specific company/organization (e.g., SMCPS), NEVER generic words like School. RULE 2: 'sub_entity_name' MUST be a corporate department or null. NEVER use a human sender name. Return JSON: {\"category_name\": \"string\", \"entity_name\": \"string\", \"sub_entity_name\": \"string\", \"purpose_name\": \"string\", \"nexus_important\": boolean}." 
     },
     { 
       "prompt_name": "BRAND_GROUNDING", "model_tier": "gemini-2.5-flash", 

@@ -188,7 +188,7 @@ async def seed_database():
     async with aiosqlite.connect(CORE_DB_PATH, timeout=20.0) as db:
         for p in data.get("prompts", []):
             await db.execute("""
-                INSERT OR IGNORE INTO CONFIG_PROMPTS (prompt_name, model_tier, prompt_text)
+                INSERT OR REPLACE INTO CONFIG_PROMPTS (prompt_name, model_tier, prompt_text)
                 VALUES (?, ?, ?)
             """, (p["prompt_name"], p["model_tier"], p["prompt_text"]))
             

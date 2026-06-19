@@ -19,6 +19,8 @@ async def search_knowledge(
         db.row_factory = aiosqlite.Row
         await db.execute(f"ATTACH DATABASE '{KB_DB_PATH}' AS kb")
         
+        safe_q = f'"{q.replace(chr(34), "")}"'
+        
         query = """
             SELECT wa.id, wa.ui_summary, wa.source_sender, wa.nexus_important, wa.state, kb_ak.extracted_facts_json 
             FROM kb.ARTIFACT_KNOWLEDGE kb_ak 
@@ -27,6 +29,10 @@ async def search_knowledge(
             ORDER BY kb_ak.rank LIMIT ? OFFSET ?
         """
         
-        cursor = await db.execute(query, (q, limit, offset))
-        rows = await cursor.fetchall()
-        return [dict(row) for row in rows]
+        try:
+            cursor = await db.execute(query, (safe_q, limit, offset))
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+        except Exception as e:
+            print(f"FTS5 Search Error: {e}")
+            return []
