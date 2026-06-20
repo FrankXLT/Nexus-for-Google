@@ -11,11 +11,6 @@ router = APIRouter(prefix="/api/system", tags=["system"])
 SHARED_DIR = os.environ.get("NEXUS_SHARED_DIR", ".")
 CORE_DB_PATH = os.path.join(SHARED_DIR, "data", "nexus_core.db")
 
-class ThemeResponseSchema(BaseModel):
-    support_colors: Dict[str, str]
-    category_colors: Dict[str, str]
-    purpose_colors: Dict[str, str]
-
 @router.get("/config")
 async def get_config(user: str = Depends(get_current_user)):
     async with aiosqlite.connect(CORE_DB_PATH) as db:
@@ -49,20 +44,27 @@ async def update_config(payload: Dict[str, str] = Body(...), user: str = Depends
 @router.post("/theme/generate")
 async def generate_theme(user: str = Depends(get_current_user)):
     try:
-        # Prompt call_llm for the UI theme using Gemini 2.5 Pro
-        # Note: We assume call_llm handles fetching 'GENERATE_UI_THEME' from CONFIG_PROMPTS.
-        theme_data = await call_llm(
+        theme_text = await call_llm(
             artifact_id="system", 
             prompt_name="GENERATE_UI_THEME", 
-            payload_text="Generate the Chromatic Engine UI Theme.", 
-            response_model=ThemeResponseSchema
+            payload_text="Generate the Chromatic Engine UI Theme. Return STRICT JSON with keys: support_colors, category_colors, purpose_colors."
         )
         
-        # If call_llm returns a raw JSON string rather than a Pydantic object, parse it.
-        if isinstance(theme_data, str):
-            theme_data = ThemeResponseSchema.parse_raw(theme_data)
-
-        support_json = json.dumps(theme_data.support_colors)
+        clean_json = theme_text.strip()
+        if clean_json.startswith('```json'):
+            clean_json = clean_json[7:]
+        if clean_json.startswith('```'):
+            clean_json = clean_json[3:]
+        if clean_json.endswith('```'):
+            clean_json = clean_json[:-3]
+        clean_json = clean_json.strip()
+        
+        theme_data = json.loads(clean_json)
+        
+        support_colors = theme_data.get("support_colors", {})
+        category_colors = theme_data.get("category_colors", {})
+        purpose_colors = theme_data.get("purpose_colors", {})
+        support_json = json.dumps(support_colors)
 
         async with aiosqlite.connect(CORE_DB_PATH, timeout=30.0) as db:
             await db.execute("BEGIN IMMEDIATE")
@@ -74,15 +76,15 @@ async def generate_theme(user: str = Depends(get_current_user)):
             )
             
             # 2. Update Category Colors
-            for cat_name, color in theme_data.category_colors.items():
+            for cat_name, color in category_colors.items():
                 await db.execute("UPDATE CATEGORIES SET color_hex = ? WHERE name = ?", (color, cat_name))
                 
             # 3. Update Purpose Colors
-            for purp_name, color in theme_data.purpose_colors.items():
+            for purp_name, color in purpose_colors.items():
                 await db.execute("UPDATE PURPOSES SET color_hex = ? WHERE name = ?", (color, purp_name))
                 
             await db.commit()
             
-        return {"status": "success", "colors_applied": len(theme_data.category_colors) + len(theme_data.purpose_colors)}
+        return {"status": "success", "colors_applied": len(category_colors) + len(purpose_colors)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Theme generation failed: {str(e)}")

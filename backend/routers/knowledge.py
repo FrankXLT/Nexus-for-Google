@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 import aiosqlite
 import os
+import re
 from backend.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
@@ -19,8 +20,13 @@ async def search_knowledge(
         db.row_factory = aiosqlite.Row
         await db.execute(f"ATTACH DATABASE '{KB_DB_PATH}' AS kb")
         
-        safe_q = f'"{q.replace(chr(34), "")}"'
+        # Replace any non-alphanumeric character with a space to prevent FTS5 syntax crashes
+        clean_q = re.sub(r'[^\w\s]', ' ', q).strip()
+        safe_q = " ".join([f'"{word}"' for word in clean_q.split()]) if clean_q else ""
         
+        if not safe_q:
+            return []
+            
         query = """
             SELECT wa.id, wa.ui_summary, wa.source_sender, wa.nexus_important, wa.state, kb_ak.extracted_facts_json 
             FROM kb.ARTIFACT_KNOWLEDGE kb_ak 
