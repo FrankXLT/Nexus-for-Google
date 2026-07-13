@@ -238,6 +238,54 @@ except Exception as e:
     echo -e "Once DNS propagates, run ${CYAN}./nexus.sh --deploy${NC} to push your code!"
 }
 
+configure() {
+    echo -e "\n${CYAN}[Configure] Connect to an existing Nexus server.${NC}"
+    echo -e "${YELLOW}This writes a local .nexus_env pointing to your already-provisioned VM.${NC}"
+    echo -e "${YELLOW}No new infrastructure will be created.${NC}\n"
+
+    ACTIVE_ACCOUNT=$(gcloud auth list --filter=status:ACTIVE --format="value(account)")
+    if [ -z "$ACTIVE_ACCOUNT" ]; then
+        CLOUDSDK_CORE_DISABLE_PROMPTS=0 gcloud auth login
+    fi
+
+    IFS=$'\n' read -r -d '' -a projects < <( gcloud projects list --format="value(projectId,name)" && printf '\0' )
+    for i in "${!projects[@]}"; do echo "[$i] ${projects[$i]}"; done
+    read -p "Select Project number: " projIdx
+    PROJECT_ID=$(echo "${projects[$projIdx]}" | awk '{print $1}')
+    gcloud config set project "$PROJECT_ID" --quiet
+
+    echo ""
+    IFS=$'\n' read -r -d '' -a instances < <( gcloud compute instances list --project="$PROJECT_ID" --format="value(name,zone,networkInterfaces[0].accessConfigs[0].natIP)" 2>/dev/null && printf '\0' )
+    if [ ${#instances[@]} -eq 0 ]; then
+        echo -e "${RED}No VM instances found in project $PROJECT_ID. Are you in the right project?${NC}"
+        exit 1
+    fi
+    echo "Available instances:"
+    for i in "${!instances[@]}"; do echo "[$i] ${instances[$i]}"; done
+    read -p "Select instance number: " vmIdx
+    TARGET_VM=$(echo "${instances[$vmIdx]}"  | awk '{print $1}' | tr -d '\r')
+    TARGET_ZONE=$(echo "${instances[$vmIdx]}" | awk '{print $2}' | tr -d '\r')
+
+    read -p "NEXUS_PUBLIC_DOMAIN (e.g., nexus.yourdomain.com): " NEXUS_PUBLIC_DOMAIN
+    echo -e "${YELLOW}(Optional) Cloudflare API token — only needed if using CF-proxied TLS.${NC}"
+    read -p "CLOUDFLARE_API_TOKEN (Leave blank to skip): " CLOUDFLARE_API_TOKEN
+
+    cat > .nexus_env <<EOF
+TARGET_VM=$TARGET_VM
+TARGET_ZONE=$TARGET_ZONE
+PROJECT_ID=$PROJECT_ID
+NEXUS_PUBLIC_DOMAIN=$NEXUS_PUBLIC_DOMAIN
+CLOUDFLARE_API_TOKEN=$CLOUDFLARE_API_TOKEN
+EOF
+
+    echo -e "\n${GREEN}✓ .nexus_env written successfully.${NC}"
+    echo -e "  VM:      ${YELLOW}$TARGET_VM${NC}"
+    echo -e "  Zone:    ${YELLOW}$TARGET_ZONE${NC}"
+    echo -e "  Project: ${YELLOW}$PROJECT_ID${NC}"
+    echo -e "  Domain:  ${YELLOW}$NEXUS_PUBLIC_DOMAIN${NC}"
+    echo -e "\nYou can now run ${CYAN}./nexus.sh --deploy${NC} to push code to this server."
+}
+
 deploy() {
     load_env
     echo -e "\n${CYAN}Starting Zero-Downtime Deployment to $TARGET_VM...${NC}"
@@ -483,7 +531,8 @@ show_menu() {
     echo "5. Clean Old Releases & Vacuum DB (--clean)"
     echo "6. Open SSH Terminal (--ssh)"
     echo "7. Download Databases (--download-dbs)"
-    echo "8. Exit"
+    echo "8. Configure (connect to existing server) (--configure)"
+    echo "9. Exit"
     echo -e "${CYAN}====================================================${NC}"
     read -p "Select an option: " opt
     case $opt in
@@ -494,13 +543,15 @@ show_menu() {
         5) clean ;;
         6) ssh_terminal ;;
         7) download_dbs ;;
-        8) exit 0 ;;
+        8) configure ;;
+        9) exit 0 ;;
         *) echo -e "${RED}Invalid option${NC}" ;;
     esac
 }
 
 case "$1" in
     --provision) provision ;;
+    --configure) configure ;;
     --deploy) deploy ;;
     --auth-tunnel) auth_tunnel ;;
     --health) health ;;
