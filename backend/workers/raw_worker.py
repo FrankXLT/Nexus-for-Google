@@ -296,4 +296,3 @@ class RawWorker:
         async with aiosqlite.connect(CORE_DB_PATH, timeout=20.0) as db:
             await db.execute("UPDATE WORKSPACE_ARTIFACTS SET state = 'ERROR', locked_at_ts = NULL WHERE id = ?", (artifact_id,))
             await db.commit()
-            await db.commit()

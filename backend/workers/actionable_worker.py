@@ -245,4 +245,3 @@ class ActionableWorker:
             await db.execute("UPDATE WORKSPACE_ARTIFACTS SET state = 'ERROR', locked_at_ts = NULL WHERE id = ?", (artifact_id,))
             await db.commit()
 
-            await db.commit()

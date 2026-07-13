@@ -137,7 +137,7 @@ class AssimilatingWorker:
         # 3. Insert Knowledge base
         async with aiosqlite.connect(KB_DB_PATH, timeout=20.0) as kb_db:
             await kb_db.execute("""
-                INSERT INTO ARTIFACT_KNOWLEDGE (artifact_id, extracted_facts_json)
+                INSERT OR REPLACE INTO ARTIFACT_KNOWLEDGE (artifact_id, extracted_facts_json)
                 VALUES (?, ?)
             """, (artifact_id, extracted_facts_json))
             await kb_db.commit()

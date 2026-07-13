@@ -150,8 +150,22 @@ class EvaluatingWorker:
         artifact_id = artifact["id"]
         source_sender = artifact.get("source_sender")
         
-        cat_id = taxonomy_ctx["cat_map"].get(eval_result.category_name, 8) # Fallback 8
-        purp_id = taxonomy_ctx["purp_map"].get(eval_result.purpose_name, 15) # Fallback 15
+        cat_id = taxonomy_ctx["cat_map"].get(eval_result.category_name)
+        purp_id = taxonomy_ctx["purp_map"].get(eval_result.purpose_name)
+
+        # If LLM returned an unrecognized category/purpose, attempt fallback by name lookup
+        if cat_id is None:
+            fallback_cat = taxonomy_ctx["cat_map"].get("Personal") or next(iter(taxonomy_ctx["cat_map"].values()), None)
+            cat_id = fallback_cat
+        if purp_id is None:
+            fallback_purp = taxonomy_ctx["purp_map"].get("Message") or next(iter(taxonomy_ctx["purp_map"].values()), None)
+            purp_id = fallback_purp
+
+        if cat_id is None or purp_id is None:
+            print(f"EvaluatingWorker: Cannot resolve cat/purp for artifact {artifact['id']}. Marking ERROR.")
+            await self._mark_error(artifact_id)
+            return
+
         
         async with aiosqlite.connect(CORE_DB_PATH, timeout=20.0) as db:
             await db.execute("BEGIN IMMEDIATE")

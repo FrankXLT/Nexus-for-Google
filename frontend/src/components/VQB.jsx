@@ -1,39 +1,81 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import useNexusStore from '../store/useNexusStore';
+import VQBHeatmap from './VQBHeatmap';
 import VQBSankey from './VQBSankey';
+import Icon from './Icon';
 
 /**
- * Visual Query Builder (VQB) wrapper component displaying activity heatmaps and Sankey flows.
+ * VQB (Visual Query Box) — the full-screen exploration panel.
  *
  * Layer Interactions:
- * - Layer 6 (Frontend UI)
+ * - Layer 6 (Frontend UI): Wraps the two VQB visualization tabs.
  *
  * State Interactions:
- * - Reads artifacts and isLoading from NexusStore.
+ * - Reads vqbTab, isExploreMode from NexusStore.
+ * - Calls setVqbTab(), fetchHeatmap(), fetchSankeyVqb() on mount.
  *
- * @returns {JSX.Element}
+ * Rendering:
+ * - Shown only in Explore Mode (isExploreMode === true).
+ * - Two tabs: HEATMAP (sender × time) and SANKEY (taxonomy flow).
+ * - Wrapped in a nexus-card with a floating offset-header icon.
+ * - Full remaining height of the dashboard.
+ *
+ * @returns {JSX.Element|null}
  */
 const VQB = () => {
-    const { artifacts, isLoading } = useNexusStore();
+    const { vqbTab, setVqbTab, isExploreMode, fetchHeatmap, fetchSankeyVqb } = useNexusStore();
 
-    if (isLoading) {
-        return <div className="h-16 flex items-center justify-center text-textSecondary mb-4">Analyzing Context...</div>;
-    }
+    useEffect(() => {
+        // Pre-fetch both VQB data sources on mount
+        fetchHeatmap(90);
+        fetchSankeyVqb();
+    }, []);
+
+    if (!isExploreMode) return null;
 
     return (
-        <div className="mb-6">
-            <h3 className="text-xs text-textSecondary mb-2 font-bold uppercase tracking-wider">Activity Heatmap</h3>
-            <div className="grid grid-cols-10 gap-2">
-                {artifacts.slice(0, 20).map((artifact) => (
-                    <div 
-                        key={artifact.id} 
-                        className={`h-8 rounded bg-bgSurface ${artifact.state === 'QUARANTINE' ? 'border border-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'border border-gray-800'}`}
-                        title={`${artifact.state} - ${artifact.entity_name || 'Unknown'}`}
-                    ></div>
-                ))}
+        <div
+            className="nexus-card flex-1 flex flex-col overflow-hidden mt-10 animate-slide-in-down"
+            style={{ minHeight: 0, paddingTop: '40px' }}
+        >
+            {/* Floating offset header */}
+            <div className="offset-header offset-header-accent">
+                <Icon name="flow-branch" className="w-5 h-5" style={{ filter: 'brightness(10)' }} />
             </div>
-            
-            <VQBSankey />
+
+            {/* Tab Bar + Controls */}
+            <div
+                className="flex items-center justify-between px-5 pb-4 shrink-0"
+                style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
+            >
+                <div className="flex items-center gap-1 ml-12">
+                    <span className="text-xs text-muted uppercase tracking-widest font-bold mr-4">Explore</span>
+                    <button
+                        className={`vqb-tab ${vqbTab === 'HEATMAP' ? 'active' : ''}`}
+                        onClick={() => setVqbTab('HEATMAP')}
+                    >
+                        <Icon name="heatmap_icon" className="w-3.5 h-3.5" />
+                        Activity Heatmap
+                    </button>
+                    <button
+                        className={`vqb-tab ${vqbTab === 'SANKEY' ? 'active' : ''}`}
+                        onClick={() => setVqbTab('SANKEY')}
+                    >
+                        <Icon name="flow-branch" className="w-3.5 h-3.5" />
+                        Taxonomy Flow
+                    </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted opacity-50">Last 90 days</span>
+                </div>
+            </div>
+
+            {/* Tab Content */}
+            <div className="flex-1 overflow-hidden p-4">
+                {vqbTab === 'HEATMAP' && <VQBHeatmap />}
+                {vqbTab === 'SANKEY' && <VQBSankey />}
+            </div>
         </div>
     );
 };
