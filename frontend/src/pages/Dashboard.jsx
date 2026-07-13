@@ -28,9 +28,11 @@ const Dashboard = () => {
 
     return (
         <Layout>
-            <div className="flex flex-col h-full" style={{ gap: '16px' }}>
-                {/* Omnibox always at top */}
-                <Omnibox />
+            <div className="flex flex-col h-full" style={{ gap: '12px' }}>
+                {/* Omnibox always at top — fixed height */}
+                <div className="shrink-0">
+                    <Omnibox />
+                </div>
 
                 {/* Explore Mode: VQB fills screen */}
                 {isExploreMode && (
@@ -39,7 +41,7 @@ const Dashboard = () => {
 
                 {/* Search Mode: Result views fill screen */}
                 {!isExploreMode && (
-                    <div className="flex-1 overflow-hidden animate-slide-in-down">
+                    <div className="flex-1 overflow-hidden animate-slide-in-down" style={{ minHeight: 0 }}>
                         {viewMode === 'STAGING_GRID' && <StagingGrid />}
                         {viewMode === 'KNOWLEDGE_GRAPH' && <KnowledgeGraph />}
                         {viewMode === 'TREEMAP' && <Treemap />}

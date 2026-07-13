@@ -339,15 +339,12 @@ deploy() {
     echo "Commanding VM to download code directly from GitHub and build..."
     gcloud compute ssh "$TARGET_VM" --zone="$TARGET_ZONE" --project="$PROJECT_ID" --quiet --strict-host-key-checking=no --command="
         set -e
-        
-        echo '-> Stopping Nexus service to free CPU/RAM for the build process...'
-        sudo systemctl stop nexus.service || true
-        
+
         echo '-> Extracting variables securely without sourcing...'
         GOOGLE_CLIENT_ID=\$(grep '^GOOGLE_CLIENT_ID=' /opt/nexus/shared/.env | cut -d'=' -f2- | tr -d '\"' | tr -d \"'\")
         NEXUS_PUBLIC_DOMAIN=\$(grep '^NEXUS_PUBLIC_DOMAIN=' /opt/nexus/shared/.env | cut -d'=' -f2- | tr -d '\"' | tr -d \"'\" | tr -d '\r')
         CLOUDFLARE_API_TOKEN=\$(grep '^CLOUDFLARE_API_TOKEN=' /opt/nexus/shared/.env | cut -d'=' -f2- | tr -d '\"' | tr -d \"'\" | tr -d '\r')
-        
+
         echo '-> Checking Node.js version...'
         CURRENT_NODE=\$(node -v 2>/dev/null | cut -d'v' -f2 | cut -d'.' -f1 || echo '0')
         if [ \"\$CURRENT_NODE\" -lt 22 ]; then
@@ -359,7 +356,7 @@ deploy() {
         fi
 
         echo '-> Verifying Caddy Cloudflare Module...'
-        if ! /usr/bin/caddy list-modules | grep -q dns.providers.cloudflare; then
+        if ! /usr/bin/caddy list-modules 2>/dev/null | grep -q dns.providers.cloudflare; then
             echo '-> Auto-healing: Patching Caddy with Cloudflare plugin...'
             sudo systemctl stop caddy || true
             sudo rm -f /usr/bin/caddy
@@ -367,39 +364,40 @@ deploy() {
             sudo chmod +x /usr/bin/caddy
         fi
 
+        # Ensure persistent cache directories exist
+        mkdir -p /opt/nexus/shared/cache/npm /opt/nexus/shared/cache/pip
+
         RELEASE_DIR=/opt/nexus/releases/\$(date +%Y%m%d_%H%M%S)
         mkdir -p \$RELEASE_DIR
-        
+
         echo '-> Downloading repository directly from GitHub to bypass tarball caches...'
         git clone --depth 1 --branch ${SELECTED_BRANCH:-development} https://github.com/$REPO.git \$RELEASE_DIR
         rm -rf \$RELEASE_DIR/.git
-               
+
         echo '-> Injecting Google Client ID into React Frontend...'
         echo \"VITE_GOOGLE_CLIENT_ID=\$GOOGLE_CLIENT_ID\" > \$RELEASE_DIR/frontend/.env
 
         echo '-> Building Frontend SPA (Remote Build Law)'
         cd \$RELEASE_DIR/frontend
-        npm install
+        # Use persistent npm cache to avoid re-downloading 251 packages on every deploy
+        npm install --cache /opt/nexus/shared/cache/npm --prefer-offline 2>&1 | grep -v '^npm warn\|^npm notice'
         npm run build
-        
+
         echo '-> Building Backend Virtual Environment'
         cd \$RELEASE_DIR
         python3 -m venv venv
         source venv/bin/activate
-        pip install -r requirements.txt
-        
+        # Use persistent pip cache to avoid re-downloading packages on every deploy
+        pip install --cache-dir /opt/nexus/shared/cache/pip -r requirements.txt -q
+
         echo '-> Executing Database Migrations'
         export NEXUS_SHARED_DIR=/opt/nexus/shared
         python backend/db_init.py
-        
-        echo '-> Updating Symlinks and Permissions'
-        ln -sfn \$RELEASE_DIR /opt/nexus/current
-        sudo chmod 755 /opt/nexus
-        sudo chmod 755 /opt/nexus/releases
-        sudo chmod 755 \$RELEASE_DIR
-        
-        echo '-> Configuring Caddy & Systemd'
 
+        echo '-> Updating Symlinks and Permissions'
+        sudo chmod 755 /opt/nexus /opt/nexus/releases \$RELEASE_DIR
+
+        echo '-> Writing Caddy & Systemd configs...'
         TLS_BLOCK=\"\"
         if [ -n \"\$CLOUDFLARE_API_TOKEN\" ]; then
             TLS_BLOCK=\"tls {
@@ -421,11 +419,15 @@ deploy() {
 }
 EOF
         sudo mv /tmp/Caddyfile /etc/caddy/Caddyfile
-        
         sudo setcap cap_net_bind_service=+ep /usr/bin/caddy || true
-        sudo caddy fmt --overwrite /etc/caddy/Caddyfile || true
-        sudo /usr/bin/caddy validate --config /etc/caddy/Caddyfile || echo 'WARNING: Caddy validation failed'
-        sudo systemctl restart caddy
+        sudo caddy fmt --overwrite /etc/caddy/Caddyfile 2>/dev/null || true
+        # Validate quietly — only print if it fails
+        if ! sudo /usr/bin/caddy validate --config /etc/caddy/Caddyfile > /tmp/caddy_validate.log 2>&1; then
+            echo 'WARNING: Caddy config validation failed:'
+            cat /tmp/caddy_validate.log
+        else
+            echo '-> Caddy config: valid'
+        fi
 
         cat > /tmp/nexus.service <<EOF
 [Unit]
@@ -445,7 +447,8 @@ Restart=always
 WantedBy=multi-user.target
 EOF
         sudo mv /tmp/nexus.service /etc/systemd/system/nexus.service
-        
+        sudo systemctl daemon-reload
+
         cat > /tmp/nexus_logrotate <<EOF
 /opt/nexus/shared/logs/*.log {
     daily
@@ -458,9 +461,20 @@ EOF
 EOF
         sudo mv /tmp/nexus_logrotate /etc/logrotate.d/nexus
 
-        sudo systemctl daemon-reload
+        # ── Zero-Downtime Hot-Swap ──
+        # Service stays up through the entire build above.
+        # We stop it only for the ~1 second it takes to flip the symlink.
+        echo '-> Hot-swapping to new release (minimal downtime)...'
+        sudo systemctl stop nexus.service || true
+        ln -sfn \$RELEASE_DIR /opt/nexus/current
         sudo systemctl enable nexus.service
         sudo systemctl start nexus.service
+        sudo systemctl restart caddy
+
+        # ── Auto-prune: keep the 3 most recent releases ──
+        echo '-> Pruning old releases (keeping last 3)...'
+        ls -dt /opt/nexus/releases/*/ 2>/dev/null | tail -n +4 | xargs -I {} sudo rm -rf {} && echo '-> Old releases pruned.' || true
+
         echo '-> Deployment Complete!'
     "
     echo -e "${GREEN}System is LIVE at https://$NEXUS_PUBLIC_DOMAIN${NC}"

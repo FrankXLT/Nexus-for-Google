@@ -8,7 +8,78 @@ SHARED_DIR = os.environ.get("NEXUS_SHARED_DIR", ".")
 CORE_DB_PATH = os.path.join(SHARED_DIR, "data", "nexus_core.db")
 
 
+@router.get("/tree")
+async def get_taxonomy_tree(user: str = Depends(get_current_user)):
+    """
+    Returns all Categories with their child Entities and per-entity linkage state counts.
+    Used by TaxonomyConsole's Tree panel to browse the default taxonomy structure.
+
+    Layer Interactions:
+    - Layer 2 (Data Ontology): Reads CATEGORIES, ENTITIES, TAXONOMY_LINKAGES.
+    - Layer 6 (Frontend UI): Feeds TaxonomyConsole Tree panel.
+
+    State Interactions:
+    - Reads CATEGORIES, ENTITIES, TAXONOMY_LINKAGES.
+
+    Args/Returns:
+    - Returns: { categories: [{ id, name, color_hex, description, gmail_sync_mode,
+                                entity_count, entities: [{ id, canonical_name,
+                                workspace_alias, primary_color_hex,
+                                active_linkage_count, quarantine_linkage_count }] }] }
+    """
+    async with aiosqlite.connect(CORE_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+
+        # Fetch all categories
+        cat_cursor = await db.execute("""
+            SELECT id, name, color_hex, description, gmail_sync_mode, top_entities_limit
+            FROM CATEGORIES ORDER BY id ASC
+        """)
+        categories = await cat_cursor.fetchall()
+
+        result = []
+        for cat in categories:
+            cat_id = cat["id"]
+
+            # Fetch entities in this category
+            ent_cursor = await db.execute("""
+                SELECT e.id, e.canonical_name, e.workspace_alias, e.primary_color_hex,
+                       COUNT(CASE WHEN tl.nexus_state = 'ACTIVE' THEN 1 END) as active_linkage_count,
+                       COUNT(CASE WHEN tl.nexus_state = 'QUARANTINE' THEN 1 END) as quarantine_linkage_count
+                FROM ENTITIES e
+                LEFT JOIN TAXONOMY_LINKAGES tl ON tl.entity_id = e.id
+                WHERE e.category_id = ?
+                GROUP BY e.id
+                ORDER BY (active_linkage_count + quarantine_linkage_count) DESC, e.canonical_name ASC
+            """, (cat_id,))
+            entities = await ent_cursor.fetchall()
+
+            result.append({
+                "id": cat["id"],
+                "name": cat["name"],
+                "color_hex": cat["color_hex"],
+                "description": cat["description"],
+                "gmail_sync_mode": cat["gmail_sync_mode"],
+                "top_entities_limit": cat["top_entities_limit"],
+                "entity_count": len(entities),
+                "entities": [
+                    {
+                        "id": e["id"],
+                        "canonical_name": e["canonical_name"],
+                        "workspace_alias": e["workspace_alias"],
+                        "primary_color_hex": e["primary_color_hex"],
+                        "active_linkage_count": e["active_linkage_count"],
+                        "quarantine_linkage_count": e["quarantine_linkage_count"],
+                    }
+                    for e in entities
+                ]
+            })
+
+        return {"categories": result}
+
+
 @router.get("/linkages")
+
 async def get_linkages(limit: int = 500, offset: int = 0, user: str = Depends(get_current_user)):
     """
     Returns all taxonomy linkages with joined category, entity, and purpose data.

@@ -35,21 +35,26 @@ const VQB = () => {
 
     return (
         <div
-            className="nexus-card flex-1 flex flex-col overflow-hidden mt-10 animate-slide-in-down"
-            style={{ minHeight: 0, paddingTop: '40px' }}
+            className="nexus-card flex flex-col overflow-hidden animate-slide-in-down"
+            style={{
+                flex: '1 1 0',
+                minHeight: 0,
+                marginTop: '28px',
+                paddingTop: '36px',
+            }}
         >
             {/* Floating offset header */}
             <div className="offset-header offset-header-accent">
                 <Icon name="flow-branch" className="w-5 h-5" style={{ filter: 'brightness(10)' }} />
             </div>
 
-            {/* Tab Bar + Controls */}
             <div
-                className="flex items-center justify-between px-5 pb-4 shrink-0"
+                className="flex items-center justify-between px-5 pb-3 shrink-0"
                 style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
             >
-                <div className="flex items-center gap-1 ml-12">
-                    <span className="text-xs text-muted uppercase tracking-widest font-bold mr-4">Explore</span>
+                <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted uppercase tracking-widest font-bold">Explore</span>
+                    <div className="w-px h-4 mx-1" style={{ background: 'rgba(255,255,255,0.1)' }} />
                     <button
                         className={`vqb-tab ${vqbTab === 'HEATMAP' ? 'active' : ''}`}
                         onClick={() => setVqbTab('HEATMAP')}
