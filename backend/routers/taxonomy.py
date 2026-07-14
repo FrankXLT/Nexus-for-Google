@@ -135,12 +135,15 @@ async def get_vqb_sankey(user: str = Depends(get_current_user)):
     async with aiosqlite.connect(CORE_DB_PATH) as db:
         db.row_factory = aiosqlite.Row
 
-        # Get active linkages with artifact counts
+        # Get both ACTIVE and QUARANTINE linkages with artifact counts.
+        # QUARANTINE linkages are shown dimmed in the Sankey so the user can see
+        # the taxonomy flow even before approving entities.
         cursor = await db.execute("""
             SELECT
                 c.name as category_name, c.color_hex as category_color,
                 e.canonical_name as entity_name, e.primary_color_hex as entity_color,
                 p.name as purpose_name, p.color_hex as purpose_color,
+                tl.nexus_state,
                 COUNT(wa.id) as artifact_count
             FROM TAXONOMY_LINKAGES tl
             JOIN CATEGORIES c ON tl.category_id = c.id
@@ -148,9 +151,9 @@ async def get_vqb_sankey(user: str = Depends(get_current_user)):
             JOIN PURPOSES p ON tl.purpose_id = p.id
             LEFT JOIN WORKSPACE_ARTIFACTS wa ON wa.mapped_linkage_id = tl.linkage_id
                 AND wa.state NOT IN ('SUB', 'RAW', 'OCR_PENDING', 'ERROR')
-            WHERE tl.nexus_state = 'ACTIVE'
+            WHERE tl.nexus_state IN ('ACTIVE', 'QUARANTINE')
             GROUP BY tl.linkage_id
-            ORDER BY artifact_count DESC
+            ORDER BY tl.nexus_state DESC, artifact_count DESC
             LIMIT 100
         """)
         rows = await cursor.fetchall()
@@ -163,14 +166,24 @@ async def get_vqb_sankey(user: str = Depends(get_current_user)):
             ent = row["entity_name"]
             purp = row["purpose_name"]
             count = max(row["artifact_count"], 1)
+            is_quarantine = row["nexus_state"] == "QUARANTINE"
 
-            # Register nodes with colors
-            if cat not in nodes_map:
-                nodes_map[cat] = {"name": cat, "itemStyle": {"color": row["category_color"] or "#6A5AA9"}}
-            if ent not in nodes_map:
-                nodes_map[ent] = {"name": ent, "itemStyle": {"color": row["entity_color"] or "#888888"}}
-            if purp not in nodes_map:
-                nodes_map[purp] = {"name": purp, "itemStyle": {"color": row["purpose_color"] or "#507B7A"}}
+            # QUARANTINE nodes get a muted color; ACTIVE nodes use full brand color
+            cat_color = row["category_color"] or "#6A5AA9"
+            ent_color = row["entity_color"] or "#888888"
+            purp_color = row["purpose_color"] or "#507B7A"
+            if is_quarantine:
+                cat_color = cat_color + "88"   # 53% opacity suffix
+                ent_color = ent_color + "88"
+                purp_color = purp_color + "88"
+
+            # Register nodes — ACTIVE state wins if node exists in both states
+            if cat not in nodes_map or is_quarantine is False:
+                nodes_map[cat] = {"name": cat, "itemStyle": {"color": cat_color}, "quarantine": is_quarantine}
+            if ent not in nodes_map or is_quarantine is False:
+                nodes_map[ent] = {"name": ent, "itemStyle": {"color": ent_color}, "quarantine": is_quarantine}
+            if purp not in nodes_map or is_quarantine is False:
+                nodes_map[purp] = {"name": purp, "itemStyle": {"color": purp_color}, "quarantine": is_quarantine}
 
             # Aggregate link weights
             link1_key = f"{cat}||{ent}"
@@ -179,13 +192,15 @@ async def get_vqb_sankey(user: str = Depends(get_current_user)):
             link2_key = f"{ent}||{purp}"
             links_map[link2_key] = links_map.get(link2_key, 0) + count
 
-        nodes = list(nodes_map.values())
+        nodes = [{"name": v["name"], "itemStyle": v["itemStyle"]} for v in nodes_map.values()]
         links = [
             {"source": k.split("||")[0], "target": k.split("||")[1], "value": v}
             for k, v in links_map.items()
         ]
 
         return {"nodes": nodes, "links": links}
+
+
 
 
 @router.patch("/approve/{linkage_id}")

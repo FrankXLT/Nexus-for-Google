@@ -110,14 +110,17 @@ async def call_llm(artifact_id: str, prompt_name: str, payload_text: str, respon
     
     # 2. Configure SDK
     config_kwargs = {"temperature": 0.1}
-    
+
     if use_grounding:
         config_kwargs["tools"] = [{"google_search": {}}]
-        
-    if response_model:
+        # LAYER 4 INLINE: Why grounding and response_mime_type='application/json' are mutually exclusive.
+        # The Google GenAI API (error code 3) does not support structured JSON output (response_mime_type)
+        # combined with tool use (google_search grounding). When grounding is active we let the model
+        # respond in plain text and manually extract the JSON block from the response.
+    elif response_model:
         # LAYER 4 INLINE: How Pydantic models are passed to the response_schema configuration.
-        # We pass standard Pydantic models directly to the SDK's `response_schema` parameter 
-        # (while setting `response_mime_type` to application/json) to enforce strict JSON output 
+        # We pass standard Pydantic models directly to the SDK's `response_schema` parameter
+        # (while setting `response_mime_type` to application/json) to enforce strict JSON output
         # that exactly matches our expected internal taxonomy structure.
         config_kwargs["response_mime_type"] = "application/json"
         config_kwargs["response_schema"] = response_model
@@ -144,7 +147,20 @@ async def call_llm(artifact_id: str, prompt_name: str, payload_text: str, respon
     await log_ai_audit(artifact_id, prompt_name or "CUSTOM_PROMPT", full_prompt, res_text, exec_ms, tokens)
     
     # 5. Return Parsed Output
-    if response_model and getattr(response, 'parsed', None):
-        return response.parsed
-    
-    return res_text
+    if response_model:
+        # If the SDK returned a structured parsed object (non-grounding path), use it directly.
+        if getattr(response, 'parsed', None):
+            return response.parsed
+        # Grounding path: manually extract JSON from the text response.
+        if res_text:
+            import re as _re
+            json_match = _re.search(r'\{[\s\S]*\}', res_text)
+            if json_match:
+                try:
+                    raw_dict = json.loads(json_match.group(0))
+                    return response_model(**raw_dict)
+                except Exception:
+                    pass
+        return None
+
+    return res_text
